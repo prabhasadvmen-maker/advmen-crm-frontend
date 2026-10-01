@@ -5,7 +5,7 @@
  * - Dynamic relative & multi-device URL resolution
  * - HTTP-Only Cookie Session Credentials
  * - Request Correlation ID (X-Request-Id)
- * - Automatic 401 Silent Token Rotation
+ * - Automatic 401 Silent Token Rotation with Queue Lock
  * - Fault-Tolerant Fallback Helpers for Subsystem Isolation
  */
 
@@ -42,7 +42,13 @@ export class ApiError extends Error {
   public details?: unknown;
   public requestId?: string;
 
-  constructor(message: string, status: number = 500, code: string = 'UNKNOWN_ERROR', details?: unknown, requestId?: string) {
+  constructor(
+    message: string,
+    status: number = 500,
+    code: string = 'UNKNOWN_ERROR',
+    details?: unknown,
+    requestId?: string
+  ) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
@@ -57,9 +63,22 @@ function generateRequestId(): string {
   return `req_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 }
 
-// Dynamic API Base URL (Relative /api/v1 allows Vite proxy to seamlessly work across mobile, LAN, and desktop)
-const envApiUrl = typeof import.meta !== 'undefined' && (import.meta as any).env ? (import.meta as any).env.VITE_API_BASE_URL : undefined;
-const API_BASE_URL = (envApiUrl || '/api/v1').replace(/\/$/, '');
+// Dynamic API Base URL Resolution
+const getBaseUrl = (): string => {
+  const envUrl =
+    typeof import.meta !== 'undefined' && (import.meta as any).env
+      ? (import.meta as any).env.VITE_API_BASE_URL
+      : undefined;
+
+  if (envUrl && envUrl.trim() !== '') {
+    return envUrl.replace(/\/$/, '');
+  }
+
+  // Fallback production URL if .env is missing or relative route fail
+  return 'https://advmen-crm-backend.onrender.com/api/v1';
+};
+
+const API_BASE_URL = getBaseUrl();
 
 let isRefreshing = false;
 let refreshSubscribers: Array<(tokenRefreshed: boolean) => void> = [];
@@ -88,8 +107,10 @@ export async function request<T>(
   options: RequestInit = {},
   keepEnvelope: boolean = false
 ): Promise<T> {
-  const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
-  
+  const url = endpoint.startsWith('http')
+    ? endpoint
+    : `${API_BASE_URL}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
+
   const headers = new Headers(options.headers || {});
   if (!headers.has('Content-Type') && !(options.body instanceof FormData)) {
     headers.set('Content-Type', 'application/json');
@@ -111,14 +132,18 @@ export async function request<T>(
   const fetchOptions: RequestInit = {
     ...options,
     headers,
-    credentials: 'include', // Ensures HTTP-only auth cookies are sent across all devices
+    credentials: 'include', // HTTP-only auth cookies
   };
 
   try {
-    const response = await fetch(url, fetchOptions);
+    let response = await fetch(url, fetchOptions);
 
-    // Handle 401 Unauthorized with Automatic Silent Refresh
-    if (response.status === 401 && !endpoint.includes('/auth/login') && !endpoint.includes('/auth/refresh')) {
+    // Handle 401 Unauthorized with Automatic Silent Refresh Queue
+    if (
+      response.status === 401 &&
+      !endpoint.includes('/auth/login') &&
+      !endpoint.includes('/auth/refresh')
+    ) {
       if (!isRefreshing) {
         isRefreshing = true;
         try {
@@ -131,23 +156,40 @@ export async function request<T>(
           if (refreshRes.ok) {
             isRefreshing = false;
             onTokenRefreshed(true);
-            return request<T>(endpoint, options, keepEnvelope);
+            // Retry original failed request after successful token refresh
+            return await request<T>(endpoint, options, keepEnvelope);
           } else {
             isRefreshing = false;
             onTokenRefreshed(false);
+            throw new ApiError(
+              'Session expired. Please log in again.',
+              401,
+              'UNAUTHORIZED'
+            );
           }
-        } catch {
+        } catch (refreshErr) {
           isRefreshing = false;
           onTokenRefreshed(false);
+          throw new ApiError(
+            'Session expired. Please log in again.',
+            401,
+            'UNAUTHORIZED'
+          );
         }
       } else {
-        // Wait for active refresh to complete before retrying
+        // Wait for active refresh lock to finish before retrying request
         return new Promise<T>((resolve, reject) => {
           refreshSubscribers.push((success) => {
             if (success) {
               resolve(request<T>(endpoint, options, keepEnvelope));
             } else {
-              reject(new ApiError('Session expired. Please log in again.', 401, 'UNAUTHORIZED'));
+              reject(
+                new ApiError(
+                  'Session expired. Please log in again.',
+                  401,
+                  'UNAUTHORIZED'
+                )
+              );
             }
           });
         });
@@ -169,8 +211,14 @@ export async function request<T>(
       );
     }
 
-    // Return the inner data payload if wrapped in standard ApiResponse envelope
-    if (isJson && data && typeof data === 'object' && 'success' in data && 'data' in data) {
+    // Return inner data payload if wrapped in standard ApiResponse envelope
+    if (
+      isJson &&
+      data &&
+      typeof data === 'object' &&
+      'success' in data &&
+      'data' in data
+    ) {
       if (keepEnvelope) {
         return {
           data: (data as any).data,
@@ -207,13 +255,17 @@ export async function withFallback<T>(
   try {
     return await apiCall;
   } catch (err) {
-    console.warn(`⚠️ [${moduleName}] Backend unavailable, activating graceful local fallback:`, err);
+    console.warn(
+      `⚠️ [${moduleName}] Backend unavailable, activating graceful local fallback:`,
+      err
+    );
     return fallbackData;
   }
 }
 
 export const apiClient = {
-  get: <T>(endpoint: string, options?: RequestInit) => request<T>(endpoint, { ...options, method: 'GET' }),
+  get: <T>(endpoint: string, options?: RequestInit) =>
+    request<T>(endpoint, { ...options, method: 'GET' }),
   getWithMeta: <T>(endpoint: string, options?: RequestInit) =>
     request<EnvelopeResponse<T>>(endpoint, { ...options, method: 'GET' }, true),
   post: <T>(endpoint: string, body?: unknown, options?: RequestInit) =>
