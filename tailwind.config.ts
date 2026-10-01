@@ -1,0 +1,96 @@
+import type { Config } from 'tailwindcss';
+
+export default {
+  content: [
+    './index.html',
+    './src/**/*.{js,ts,jsx,tsx}',
+  ],
+  theme: {
+    extend: {
+      spacing: {
+        'fib-1': '1px',
+        'fib-2': '2px',
+        'fib-3': '3px',
+        'fib-5': '5px',
+        'fib-8': '8px',
+        'fib-13': '13px',
+        'fib-21': '21px',
+        'fib-34': '34px',
+        'fib-55': '55px',
+        'fib-89': '89px',
+      },
+      colors: {
+        blue: {
+          50: '#EAF2FF',
+          100: '#D3E4FF',
+          200: '#A6C8FF',
+          300: '#78ABFF',
+          400: '#4A8DFF',
+          500: '#2563EB',
+          600: '#1D4ED8',
+          700: '#1E40AF',
+          800: '#1B3480',
+          900: '#13245B',
+        },
+        green: {
+          50: '#E8FBF1',
+          100: '#CDF6E1',
+          200: '#9AECC3',
+          300: '#67E0A5',
+          400: '#38CE88',
+          500: '#10B981',
+          600: '#059669',
+          700: '#047857',
+          800: '#065F46',
+          900: '#03362A',
+        },
+        neutral: {
+          0: '#FFFFFF',
+          50: '#F7F8FA',
+          100: '#EEF1F4',
+          200: '#E1E5EA',
+          300: '#CBD2D9',
+          400: '#98A2AE',
+          500: '#6B7684',
+          600: '#4B5563',
+          700: '#333D4C',
+          800: '#1F2733',
+          900: '#11161D',
+        },
+        amber: {
+          100: '#FEF3C7',
+          500: '#F59E0B',
+          800: '#92400E',
+        },
+        rose: {
+          100: '#FFE4E6',
+          500: '#E11D48',
+          700: '#BE123C',
+        },
+        violet: {
+          100: '#EDE9FE',
+          500: '#7C5CFC',
+          700: '#5B21B6',
+        },
+      },
+      boxShadow: {
+        'elevation-1': 'var(--elevation-1)',
+        'elevation-2': 'var(--elevation-2)',
+        'elevation-3': 'var(--elevation-3)',
+        'inset-1': 'var(--inset-1)',
+        'inset-2': 'var(--inset-2)',
+        'pressed': 'var(--pressed)',
+      },
+      fontFamily: {
+        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+      },
+      borderRadius: {
+        sm: 'var(--radius-sm)',
+        md: 'var(--radius-md)',
+        lg: 'var(--radius-lg)',
+        pill: 'var(--radius-pill)',
+      },
+    },
+  },
+  plugins: [],
+} satisfies Config;

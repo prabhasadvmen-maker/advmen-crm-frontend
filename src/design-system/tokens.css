@@ -1,0 +1,233 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ==========================================================================
+   ADVMEN SalesOS — Design System Tokens & Fibonacci Structural Scale
+   ========================================================================== */
+
+:root {
+  /* ------------------------------------------------------------------------
+     1. Fibonacci Spacing & Proportional Scale
+     ------------------------------------------------------------------------ */
+  --fib-1: 1px;
+  --fib-2: 2px;
+  --fib-3: 3px;
+  --fib-5: 5px;
+  --fib-8: 8px;
+  --fib-13: 13px;
+  --fib-21: 21px;
+  --fib-34: 34px;
+  --fib-55: 55px;
+  --fib-89: 89px;
+
+  /* ------------------------------------------------------------------------
+     2. Blue Scale — Trust / Security / Primary Actions / Communication (30%)
+     ------------------------------------------------------------------------ */
+  --blue-50: #EAF2FF;
+  --blue-100: #D3E4FF;
+  --blue-200: #A6C8FF;
+  --blue-300: #78ABFF;
+  --blue-400: #4A8DFF;
+  --blue-500: #2563EB; /* Primary brand / buttons / links / active nav */
+  --blue-600: #1D4ED8; /* Primary button pressed state */
+  --blue-700: #1E40AF; /* Header / sidebar deep surface */
+  --blue-800: #1B3480; /* Dark-surface text on blue-50 */
+  --blue-900: #13245B; /* Super Admin panel accent */
+
+  /* ------------------------------------------------------------------------
+     3. Green Scale — Growth / Revenue / Positive Momentum (10%)
+     ------------------------------------------------------------------------ */
+  --green-50: #E8FBF1;
+  --green-100: #CDF6E1;
+  --green-200: #9AECC3;
+  --green-300: #67E0A5;
+  --green-400: #38CE88;
+  --green-500: #10B981; /* "Deal Won", revenue KPIs, positive forecast */
+  --green-600: #059669;
+  --green-700: #047857; /* Revenue chart primary series */
+  --green-800: #065F46;
+  --green-900: #03362A; /* Finance panel deep accent */
+
+  /* ------------------------------------------------------------------------
+     4. Neutral Scale — Structure / Readability / Base Canvas (60%)
+     ------------------------------------------------------------------------ */
+  --neutral-0: #FFFFFF;   /* Card surfaces, raised elements */
+  --neutral-50: #F7F8FA;  /* App canvas / page background */
+  --neutral-100: #EEF1F4; /* Sunken surfaces (skeuomorphic inset base) */
+  --neutral-200: #E1E5EA; /* Dividers, table borders */
+  --neutral-300: #CBD2D9; /* Disabled borders */
+  --neutral-400: #98A2AE; /* Placeholder text, inactive icons */
+  --neutral-500: #6B7684; /* Secondary body text */
+  --neutral-600: #4B5563; /* Primary body text on light / secondary on dark */
+  --neutral-700: #333D4C; /* Headings */
+  --neutral-800: #1F2733; /* Sidebar / topbar dark surface */
+  --neutral-900: #11161D; /* Highest-contrast text, dark canvas */
+
+  /* ------------------------------------------------------------------------
+     5. Semantic Accents (Deliberately outside core 3 families)
+     ------------------------------------------------------------------------ */
+  --amber-100: #FEF3C7;
+  --amber-500: #F59E0B; /* SLA at-risk, warnings */
+  --amber-800: #92400E;
+
+  --rose-100: #FFE4E6;
+  --rose-500: #E11D48;  /* SLA breached, overdue, lost deals, destructive */
+  --rose-700: #BE123C;
+
+  --violet-100: #EDE9FE;
+  --violet-500: #7C5CFC; /* AI-generated content marker */
+  --violet-700: #5B21B6;
+
+  /* ------------------------------------------------------------------------
+     6. Skeuomorphic Elevation & Lighting (Light source: top-left)
+     ------------------------------------------------------------------------ */
+  --bevel-light: rgba(255, 255, 255, 0.7);
+  --bevel-dark: rgba(17, 22, 29, 0.12);
+
+  --elevation-1: 0 1px 0 var(--bevel-light) inset,
+                 0 1px 2px rgba(17, 22, 29, 0.06),
+                 0 1px 1px rgba(17, 22, 29, 0.04);
+
+  --elevation-2: 0 1px 0 var(--bevel-light) inset,
+                 0 4px 10px rgba(17, 22, 29, 0.08),
+                 0 2px 4px rgba(17, 22, 29, 0.05);
+
+  --elevation-3: 0 1px 0 var(--bevel-light) inset,
+                 0 12px 24px rgba(17, 22, 29, 0.12),
+                 0 4px 8px rgba(17, 22, 29, 0.06);
+
+  --inset-1: inset 0 1px 2px rgba(17, 22, 29, 0.10),
+             inset 0 -1px 0 var(--bevel-light);
+
+  --inset-2: inset 0 2px 4px rgba(17, 22, 29, 0.14),
+             inset 0 -1px 0 rgba(255, 255, 255, 0.5);
+
+  --pressed: inset 0 2px 4px rgba(17, 22, 29, 0.16);
+  --focus-ring: 0 0 0 3px rgba(37, 99, 235, 0.35);
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-pill: 999px;
+}
+
+/* Skeuomorphic tactile classes */
+.skeuo-raised-1 {
+  background: var(--neutral-0);
+  border: 1px solid var(--neutral-200);
+  box-shadow: var(--elevation-1);
+}
+
+.skeuo-raised-2 {
+  background: var(--neutral-0);
+  border: 1px solid var(--neutral-200);
+  box-shadow: var(--elevation-2);
+}
+
+.skeuo-raised-3 {
+  background: var(--neutral-0);
+  border: 1px solid var(--neutral-200);
+  box-shadow: var(--elevation-3);
+}
+
+.skeuo-sunken {
+  background: var(--neutral-100);
+  border: 1px solid var(--neutral-300);
+  box-shadow: var(--inset-1);
+}
+
+.skeuo-sunken:focus-within,
+.skeuo-sunken:focus {
+  border-color: var(--blue-500);
+  box-shadow: var(--inset-1), var(--focus-ring);
+}
+
+.skeuo-btn-primary {
+  background: linear-gradient(180deg, var(--blue-400) 0%, var(--blue-500) 100%);
+  border: 1px solid var(--blue-600);
+  box-shadow: var(--elevation-1);
+  color: #ffffff;
+  transition: all 0.15s ease-in-out;
+}
+
+.skeuo-btn-primary:hover {
+  background: linear-gradient(180deg, var(--blue-300) 0%, var(--blue-500) 100%);
+  box-shadow: var(--elevation-2);
+}
+
+.skeuo-btn-primary:active {
+  background: linear-gradient(180deg, var(--blue-600) 0%, var(--blue-500) 100%);
+  box-shadow: var(--pressed);
+  transform: translateY(1px);
+}
+
+.skeuo-btn-secondary {
+  background: linear-gradient(180deg, var(--neutral-0) 0%, var(--neutral-100) 100%);
+  border: 1px solid var(--neutral-300);
+  box-shadow: var(--elevation-1);
+  color: var(--neutral-700);
+  transition: all 0.15s ease-in-out;
+}
+
+.skeuo-btn-secondary:hover {
+  background: var(--neutral-50);
+  border-color: var(--neutral-400);
+  box-shadow: var(--elevation-2);
+}
+
+.skeuo-btn-secondary:active {
+  background: var(--neutral-100);
+  box-shadow: var(--pressed);
+  transform: translateY(1px);
+}
+
+.skeuo-btn-success {
+  background: linear-gradient(180deg, var(--green-400) 0%, var(--green-500) 100%);
+  border: 1px solid var(--green-600);
+  box-shadow: var(--elevation-1);
+  color: #ffffff;
+}
+
+.skeuo-btn-success:hover {
+  background: linear-gradient(180deg, var(--green-300) 0%, var(--green-500) 100%);
+  box-shadow: var(--elevation-2);
+}
+
+.skeuo-btn-success:active {
+  background: linear-gradient(180deg, var(--green-600) 0%, var(--green-500) 100%);
+  box-shadow: var(--pressed);
+  transform: translateY(1px);
+}
+
+.skeuo-btn-danger {
+  background: linear-gradient(180deg, #F43F5E 0%, var(--rose-500) 100%);
+  border: 1px solid var(--rose-700);
+  box-shadow: var(--elevation-1);
+  color: #ffffff;
+}
+
+.skeuo-btn-danger:active {
+  box-shadow: var(--pressed);
+  transform: translateY(1px);
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--neutral-300);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--neutral-400);
+}
