@@ -26,6 +26,16 @@ export interface RecordPaymentPayload {
   idempotencyKey?: string;
 }
 
+export interface InvoiceMetrics {
+  totalRevenue: number;
+  paidCount: number;
+  pendingAmount: number;
+  pendingCount: number;
+  overdueAmount: number;
+  overdueCount: number;
+  totalInvoices: number;
+}
+
 function normalizeInvoice(raw: any): Invoice {
   return {
     id: raw.id || raw.invoiceId || raw._id?.toString() || `inv_${Date.now()}`,
@@ -34,7 +44,7 @@ function normalizeInvoice(raw: any): Invoice {
     leadId: raw.leadId,
     company: raw.company || raw.recipientName || 'Enterprise Client',
     amount: typeof raw.amount === 'number' ? raw.amount : 25000,
-    currency: raw.currency || 'USD',
+    currency: 'INR',
     status: raw.status || 'SENT',
     dueDate: raw.dueDate ? new Date(raw.dueDate).toLocaleDateString() : 'Net 30',
     paidAt: raw.paidAt ? new Date(raw.paidAt).toLocaleDateString() : undefined,
@@ -62,16 +72,19 @@ export const invoiceApi = {
     );
   },
 
-  getMetrics: async (): Promise<{ totalRevenue: number; paidCount: number; pendingCount: number; overdueCount: number }> => {
+  getMetrics: async (): Promise<InvoiceMetrics> => {
     return await withFallback(
       (async () => {
         return await apiClient.get<any>('/invoices/metrics');
       })(),
       {
-        totalRevenue: 285000,
-        paidCount: 14,
-        pendingCount: 6,
-        overdueCount: 1,
+        totalRevenue: 0,
+        paidCount: 0,
+        pendingAmount: 0,
+        pendingCount: 0,
+        overdueAmount: 0,
+        overdueCount: 0,
+        totalInvoices: 0,
       },
       'Invoice Metrics'
     );
@@ -91,6 +104,13 @@ export const invoiceApi = {
 
     const updated = await apiClient.post<any>(`/invoices/${id}/pay`, paymentData);
     return normalizeInvoice(updated);
+  },
+
+  recordFinalizedLeadPayment: async (leadId: string, amount: number): Promise<Invoice> => {
+    const payment = await apiClient.post<any>(`/invoices/leads/${encodeURIComponent(leadId)}/payment`, {
+      amount,
+    });
+    return normalizeInvoice(payment);
   },
 
   deleteInvoice: async (id: string): Promise<boolean> => {

@@ -10,6 +10,9 @@ import {
   LogOut,
   UserCheck,
   CheckCircle2,
+  BriefcaseBusiness,
+  Phone,
+  Fingerprint,
 } from 'lucide-react';
 
 interface UserProfileDrawerProps {
@@ -45,30 +48,58 @@ export function UserProfileDrawer({
     >
       <div className="space-y-fib-21">
         {/* User Card */}
-        <div className="skeuo-raised-2 bg-white rounded-xl border border-neutral-200 p-fib-21 flex items-start gap-fib-13 shadow-sm">
-          <Avatar name={user.name} src={user.avatarUrl} size="lg" status="online" />
-          <div className="flex-1 min-w-0 space-y-1">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h4 className="text-base font-extrabold text-neutral-900 truncate">
-                {user.name}
-              </h4>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200">
-                {user.role.replace(/_/g, ' ')}
-              </span>
+        <div className="overflow-hidden rounded-2xl border border-blue-200 bg-white shadow-sm">
+          <div className="bg-gradient-to-r from-blue-700 via-blue-600 to-indigo-600 p-5 text-white">
+            <div className="flex items-center gap-4">
+              <Avatar name={user.name} src={user.avatarUrl} size="lg" status="online" />
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h4 className="truncate text-lg font-extrabold">{user.name || 'Workspace user'}</h4>
+                  <span className="rounded-full border border-white/30 bg-white/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide">
+                    {user.role.replace(/_/g, ' ')}
+                  </span>
+                </div>
+                <p className="mt-1 flex items-center gap-1.5 truncate text-xs text-blue-100">
+                  <Mail className="h-3.5 w-3.5 shrink-0" />
+                  {user.email || 'Email not provided'}
+                </p>
+              </div>
             </div>
-            <p className="text-xs text-neutral-500 flex items-center gap-1.5">
-              <Mail className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
-              <span className="truncate">{user.email}</span>
-            </p>
-            <p className="text-[11px] text-neutral-600 flex items-center gap-1.5 pt-1">
-              <Building2 className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
-              <span className="font-semibold text-neutral-800">
-                {user.organizationName || 'Acme Enterprise Inc.'}
+          </div>
+          <div className="grid grid-cols-1 gap-2 p-4 sm:grid-cols-2">
+            <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-3">
+              <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-neutral-500">
+                <Building2 className="h-3.5 w-3.5" /> Workspace
               </span>
-              <span className="text-neutral-400 font-mono text-[10px]">
-                ({user.organizationId})
+              <p className="mt-1 truncate text-xs font-bold text-neutral-900">
+                {user.organizationName || 'Workspace not assigned'}
+              </p>
+              <p className="mt-0.5 truncate font-mono text-[10px] text-neutral-500">
+                {user.organizationId || 'ID unavailable'}
+              </p>
+            </div>
+            <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-3">
+              <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-neutral-500">
+                <Fingerprint className="h-3.5 w-3.5" /> Employee ID
               </span>
-            </p>
+              <p className="mt-1 text-xs font-bold text-neutral-900">{user.employeeId || 'Admin account'}</p>
+            </div>
+            {user.department && (
+              <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-3">
+                <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-neutral-500">
+                  <BriefcaseBusiness className="h-3.5 w-3.5" /> Department
+                </span>
+                <p className="mt-1 text-xs font-bold text-neutral-900">{user.department}</p>
+              </div>
+            )}
+            {user.phone && (
+              <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-3">
+                <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-neutral-500">
+                  <Phone className="h-3.5 w-3.5" /> Phone
+                </span>
+                <p className="mt-1 text-xs font-bold text-neutral-900">{user.phone}</p>
+              </div>
+            )}
           </div>
         </div>
 
@@ -86,7 +117,7 @@ export function UserProfileDrawer({
               </span>
               <span className="font-semibold text-neutral-900 flex items-center gap-1.5">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                HTTP-Only JWT Cookie
+                HTTP-only JWT session
               </span>
             </div>
 
@@ -96,7 +127,7 @@ export function UserProfileDrawer({
               </span>
               <span className="font-semibold text-neutral-900 flex items-center gap-1.5">
                 <UserCheck className="w-3.5 h-3.5 text-blue-600" />
-                Active Multi-Tenant Enforced
+                Organization-scoped access
               </span>
             </div>
           </div>

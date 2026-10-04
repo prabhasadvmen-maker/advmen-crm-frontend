@@ -1,9 +1,22 @@
-import { apiClient, withFallback } from '@/lib/apiClient';
+import { apiClient } from '@/lib/apiClient';
 
 export interface TenantOrgDto {
   id: string;
   organizationId: string;
   name: string;
+  timezone?: string;
+  settings?: {
+    timezone: string;
+    currency: string;
+    leadResponseSlaMinutes: number;
+    allowTelephonyRecording: boolean;
+  };
+  limits?: {
+    maxUsers: number;
+    maxLeads: number;
+    maxStorageMb: number;
+    aiTokensIncluded: number;
+  };
   slug?: string;
   tier: 'ENTERPRISE_PLUS' | 'ENTERPRISE' | 'PRO';
   planTier?: 'STARTER' | 'BUSINESS' | 'ENTERPRISE';
@@ -47,46 +60,31 @@ export interface DashboardStatsDto {
   urgentTasks: number;
 }
 
-const FALLBACK_ORGS: TenantOrgDto[] = [];
-
 export const organizationsApi = {
   getOrganizations: async (): Promise<TenantOrgDto[]> => {
-    return await withFallback(
-      apiClient.get<TenantOrgDto[]>('/organizations'),
-      FALLBACK_ORGS,
-      'Tenant Organizations'
-    );
+    return await apiClient.get<TenantOrgDto[]>('/organizations');
   },
 
   getDashboardStats: async (): Promise<DashboardStatsDto> => {
-    return await withFallback(
-      apiClient.get<DashboardStatsDto>('/organizations/dashboard-stats'),
-      {
-        activeWorkspaces: 1,
-        provisionedStaffSeats: 4,
-        totalRevenue: 0,
-        totalLeads: 0,
-        finalizedLeadsCount: 0,
-        dealsWonCount: 0,
-        openQueries: 0,
-        totalTasks: 0,
-        pendingTasks: 0,
-        urgentTasks: 0,
-      },
-      'Dashboard Stats'
-    );
+    return await apiClient.get<DashboardStatsDto>('/organizations/dashboard-stats');
   },
 
   getPublicOrganizations: async (): Promise<TenantOrgDto[]> => {
-    return await withFallback(
-      apiClient.get<TenantOrgDto[]>('/organizations/public'),
-      FALLBACK_ORGS,
-      'Public Tenant Organizations'
-    );
+    return await apiClient.get<TenantOrgDto[]>('/organizations/public');
   },
 
   getOrganizationById: async (id: string): Promise<TenantOrgDto> => {
     return await apiClient.get<TenantOrgDto>(`/organizations/${id}`);
+  },
+
+  updateOrganizationSettings: async (
+    id: string,
+    payload: {
+      name: string;
+      settings: NonNullable<TenantOrgDto['settings']>;
+    }
+  ): Promise<TenantOrgDto> => {
+    return await apiClient.put<TenantOrgDto>(`/organizations/${id}/settings`, payload);
   },
 
   createOrganization: async (dto: CreateTenantOrgDto): Promise<TenantOrgDto> => {
@@ -97,4 +95,3 @@ export const organizationsApi = {
     return await apiClient.delete(`/organizations/${id}`);
   },
 };
-

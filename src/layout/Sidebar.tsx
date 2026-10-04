@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useSessionStore, ROLE_DASHBOARDS } from '@/stores/sessionStore';
 import { useUIStore } from '@/stores/uiStore';
 import { cn } from '@/utils/cn';
@@ -7,7 +7,6 @@ import {
   LayoutDashboard,
   Users,
   Kanban,
-  Inbox,
   CheckSquare,
   FileText,
   CreditCard,
@@ -20,6 +19,9 @@ import {
   Upload,
   UserCheck,
   HelpCircle,
+  CalendarClock,
+  Settings,
+  LogOut,
 } from 'lucide-react';
 import { UserRole } from '@/types';
 
@@ -35,7 +37,8 @@ interface NavItem {
 }
 
 export function Sidebar() {
-  const { user } = useSessionStore();
+  const { user, logout } = useSessionStore();
+  const navigate = useNavigate();
   const { sidebarCollapsed, toggleSidebar, mobileSidebarOpen, setMobileSidebarOpen } = useUIStore();
   const location = useLocation();
   const { leads = [] } = useLeads();
@@ -74,6 +77,12 @@ export function Sidebar() {
     ...(isAdmin
       ? [{ label: 'Employee Management', path: '/employees', icon: <UserCheck className="w-4 h-4 text-indigo-400" /> }]
       : []),
+    ...(isAdmin
+      ? [{ label: 'Attendance', path: '/attendance', icon: <CalendarClock className="w-4 h-4 text-emerald-400" /> }]
+      : []),
+    ...(isAdmin
+      ? [{ label: 'Settings', path: '/settings', icon: <Settings className="w-4 h-4 text-slate-400" /> }]
+      : []),
     {
       label: isAdmin ? 'Leads & Prospects' : 'My Assigned Leads',
       path: '/leads',
@@ -81,7 +90,7 @@ export function Sidebar() {
       permission: 'lead.view',
       badge: leads.length > 0 ? String(leads.length) : undefined,
     },
-    { label: isAdmin ? 'Deals & Pipeline' : 'My Deals Pipeline', path: '/pipeline', icon: <Kanban className="w-4 h-4" />, permission: 'deal.view' },
+    { label: isAdmin ? 'Deals & Pipeline' : 'My Deals Pipeline', path: '/pipeline', icon: <Kanban className="w-4 h-4" />, permission: isAdmin ? 'deal.view' : undefined },
     {
       label: 'Lead Queries',
       path: '/calls',
@@ -89,7 +98,6 @@ export function Sidebar() {
       permission: 'call.view',
       badge: openQueriesCount > 0 ? String(openQueriesCount) : undefined,
     },
-    { label: 'Unified Inbox', path: '/inbox', icon: <Inbox className="w-4 h-4" />, permission: 'inbox.view' },
     {
       label: 'Tasks & Activities',
       path: '/tasks',
@@ -97,11 +105,15 @@ export function Sidebar() {
       permission: 'task.manage',
       badge: pendingTasksCount > 0 ? String(pendingTasksCount) : undefined,
     },
-    { label: 'Proposals', path: '/proposals', icon: <FileText className="w-4 h-4" />, permission: 'proposal.create' },
-    { label: 'Invoices & Billing', path: '/invoices', icon: <CreditCard className="w-4 h-4" />, permission: 'invoice.view' },
-    { label: 'Reports & Analytics', path: '/reports', icon: <BarChart3 className="w-4 h-4" />, permission: 'reports.view' },
+    ...(!isAdmin
+      ? [{ label: 'Proposals', path: '/proposals', icon: <FileText className="w-4 h-4" />, permission: 'proposal.manage' }]
+      : []),
+    { label: 'Invoices & Billing', path: '/invoices', icon: <CreditCard className="w-4 h-4" />, permission: 'invoice.manage' },
+    { label: 'Reports & Analytics', path: '/reports', icon: <BarChart3 className="w-4 h-4" />, permission: 'report.view' },
     { label: 'AI Intelligence Center', path: '/ai', icon: <Sparkles className="w-4 h-4" />, permission: 'ai.use', badge: 'AI' },
-    { label: 'Automation Builder', path: '/automation', icon: <Zap className="w-4 h-4" />, permission: 'org.manage' },
+    ...(!isAdmin
+      ? [{ label: 'Automation Builder', path: '/automation', icon: <Zap className="w-4 h-4" />, permission: 'automation.manage' }]
+      : []),
     { label: 'Import & Distribute', path: '/lead-import', icon: <Upload className="w-4 h-4" />, permission: 'lead.assign' },
   ];
 
@@ -128,9 +140,17 @@ export function Sidebar() {
         )}
       >
         {/* Brand Header */}
-        <div className="h-16 flex items-center justify-between px-fib-13 border-b border-neutral-800/80 bg-neutral-900/90">
-          <div className="flex items-center gap-fib-8 overflow-hidden">
-            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white shadow-elevation-1 border border-blue-400/30 shrink-0">
+        <div className={cn(
+          'shrink-0 border-b border-neutral-800/80 bg-neutral-900/90',
+          sidebarCollapsed
+            ? 'h-16 flex items-center justify-center gap-1 px-1'
+            : 'h-16 flex items-center justify-between px-fib-13'
+        )}>
+          <div className={cn('flex items-center overflow-hidden', sidebarCollapsed ? 'shrink-0' : 'gap-fib-8')}>
+            <div className={cn(
+              'rounded-lg bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white shadow-elevation-1 border border-blue-400/30 shrink-0',
+              sidebarCollapsed ? 'w-8 h-8' : 'w-9 h-9'
+            )}>
               <Layers className="w-5 h-5 text-white" />
             </div>
             {!sidebarCollapsed && (
@@ -145,13 +165,27 @@ export function Sidebar() {
             )}
           </div>
 
-          {!sidebarCollapsed && (
+          {sidebarCollapsed ? (
             <button
+              type="button"
               onClick={toggleSidebar}
-              className="p-1.5 rounded-md hover:bg-neutral-800 text-neutral-400 hover:text-white transition-colors hidden lg:flex"
-              title="Collapse Sidebar"
+              className="hidden h-6 w-6 shrink-0 items-center justify-center rounded-md text-neutral-300 transition-colors hover:bg-neutral-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-400 lg:flex"
+              title="Expand sidebar"
+              aria-label="Expand sidebar"
+              aria-expanded={false}
             >
-              <ChevronLeft className="w-4 h-4" />
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={toggleSidebar}
+              className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-md text-neutral-400 transition-colors hover:bg-neutral-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-400 lg:flex"
+              title="Collapse sidebar"
+              aria-label="Collapse sidebar"
+              aria-expanded={true}
+            >
+              <ChevronLeft className="h-4 w-4" />
             </button>
           )}
         </div>
@@ -223,36 +257,48 @@ export function Sidebar() {
           })}
         </nav>
 
-        {/* Collapsed Expand Toggle */}
-        {sidebarCollapsed && (
-          <div className="p-fib-8 border-t border-neutral-800 flex justify-center hidden lg:flex">
-            <button
-              onClick={toggleSidebar}
-              className="p-2 rounded-md hover:bg-neutral-800 text-neutral-400 hover:text-white"
-              title="Expand Sidebar"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
-        )}
-
-        {/* Current Tenant Footer */}
+        {/* Current Tenant & Sign Out Footer */}
         <div className="p-fib-13 border-t border-neutral-800/80 bg-neutral-950/60">
           {!sidebarCollapsed ? (
-            <div className="flex items-center gap-fib-8 text-xs">
-              <div className="w-2 h-2 rounded-full bg-green-500 animate-ping" />
-              <div className="min-w-0">
-                <span className="text-[11px] font-semibold text-neutral-200 block truncate">
-                  {user?.organizationName || 'Organization'}
-                </span>
-                <span className="text-[10px] text-neutral-500 block truncate font-mono">
-                  {(user?.role || '').replace('_', ' ')}
-                </span>
+            <div className="flex items-center justify-between gap-fib-8 text-xs">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="w-2 h-2 rounded-full bg-green-500 animate-ping shrink-0" />
+                <div className="min-w-0">
+                  <span className="text-[11px] font-semibold text-neutral-200 block truncate">
+                    {user?.organizationName || 'Organization'}
+                  </span>
+                  <span className="text-[10px] text-neutral-500 block truncate font-mono">
+                    {(user?.role || '').replace(/_/g, ' ')}
+                  </span>
+                </div>
               </div>
+              <button
+                onClick={async () => {
+                  await logout();
+                  navigate('/login?logout=true');
+                }}
+                className="flex items-center gap-1 px-2 py-1 rounded bg-neutral-900 hover:bg-rose-950/80 text-neutral-400 hover:text-rose-300 border border-neutral-800 hover:border-rose-900/50 transition-colors shrink-0"
+                title="Sign Out / Exit Workspace"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span className="text-[10px] font-semibold">Exit</span>
+              </button>
             </div>
           ) : (
-            <div className="flex justify-center" title={`${user?.organizationName || ''} (${user?.role || ''})`}>
-              <div className="w-2.5 h-2.5 rounded-full bg-green-500 ring-2 ring-neutral-800" />
+            <div className="flex flex-col items-center gap-2">
+              <div className="flex justify-center" title={`${user?.organizationName || ''} (${user?.role || ''})`}>
+                <div className="w-2.5 h-2.5 rounded-full bg-green-500 ring-2 ring-neutral-800" />
+              </div>
+              <button
+                onClick={async () => {
+                  await logout();
+                  navigate('/login?logout=true');
+                }}
+                className="p-1 rounded text-neutral-400 hover:text-rose-400 hover:bg-neutral-900 transition-colors"
+                title="Sign Out / Exit"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
             </div>
           )}
         </div>

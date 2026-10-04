@@ -23,6 +23,7 @@ import {
   Check,
   Briefcase,
   Sparkles,
+  Clock,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
@@ -57,7 +58,7 @@ export function EmployeeManagementPage() {
   const [newPhone, setNewPhone] = useState('');
   const [newEmail, setNewEmail] = useState('');
   const [newRole, setNewRole] = useState<UserRole>('SALES_REP');
-  const [newPassword, setNewPassword] = useState('Advmen2026!');
+  const [newPassword, setNewPassword] = useState('');
   const [department, setDepartment] = useState('Sales & Business Development');
   const [isSubmittingUser, setIsSubmittingUser] = useState(false);
 
@@ -154,11 +155,11 @@ export function EmployeeManagementPage() {
   // Submit Add Employee
   const handleAddEmployeeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newName.trim() || !newEmail.trim()) {
+    if (!newName.trim() || !newEmail.trim() || newPassword.length < 6) {
       addToast({
         type: 'warning',
         title: 'Required Fields Missing',
-        message: 'Please provide employee name and email address.',
+        message: 'Please provide employee name, email, and a password with at least 6 characters.',
       });
       return;
     }
@@ -183,13 +184,13 @@ export function EmployeeManagementPage() {
       setNewPhone('');
       setNewEmail('');
       setNewRole('SALES_REP');
-      setNewPassword('Advmen2026!');
+      setNewPassword('');
       setDepartment('Sales & Business Development');
 
       addToast({
         type: 'success',
         title: 'Employee Account Created',
-        message: `${created.name} (${newRole.replace(/_/g, ' ')}) has been added to database. Login Mobile: ${created.phone || created.email}`,
+        message: `${created.name} was added. Employee ID: ${created.employeeId || 'unavailable'}; share the ID and password for login.`,
       });
       loadData();
     } catch (err: any) {
@@ -360,6 +361,7 @@ export function EmployeeManagementPage() {
       const matchesSearch =
         e.name.toLowerCase().includes(q) ||
         e.email.toLowerCase().includes(q) ||
+        (e.employeeId && e.employeeId.toLowerCase().includes(q)) ||
         (e.phone && e.phone.includes(q)) ||
         (e.department && e.department.toLowerCase().includes(q));
 
@@ -547,7 +549,7 @@ export function EmployeeManagementPage() {
             <thead className="bg-neutral-50 text-[11px] font-bold text-neutral-500 uppercase tracking-wider border-b border-neutral-200">
               <tr>
                 <th className="py-3.5 px-4">Employee Details</th>
-                <th className="py-3.5 px-4">Mobile (Login ID)</th>
+                <th className="py-3.5 px-4">Employee ID (Login ID)</th>
                 <th className="py-3.5 px-4">Work Email</th>
                 <th className="py-3.5 px-4">Role & Department</th>
                 <th className="py-3.5 px-4 text-center">Assigned Leads</th>
@@ -597,17 +599,17 @@ export function EmployeeManagementPage() {
                         </div>
                       </td>
 
-                      {/* Mobile / Login ID */}
+                      {/* Employee ID / Login ID */}
                       <td className="py-3.5 px-4">
                         <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 font-mono text-xs font-bold">
-                          <Phone className="w-3.5 h-3.5 text-emerald-600" />
-                          <span>{emp.phone || '9876543210'}</span>
+                          <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>{emp.employeeId || emp.id.slice(-6)}</span>
                           <button
-                            onClick={() => handleCopy(emp.phone || '9876543210', `phone_${emp.id}`)}
+                            onClick={() => handleCopy(emp.employeeId || emp.id.slice(-6), `employee_${emp.id}`)}
                             className="p-1 hover:text-emerald-950 text-emerald-600 rounded transition-colors ml-0.5"
-                            title="Copy Mobile"
+                            title="Copy employee login ID"
                           >
-                            {copiedId === `phone_${emp.id}` ? (
+                            {copiedId === `employee_${emp.id}` ? (
                               <Check className="w-3 h-3 text-emerald-700" />
                             ) : (
                               <Copy className="w-3 h-3" />
@@ -653,15 +655,24 @@ export function EmployeeManagementPage() {
 
                       {/* Status */}
                       <td className="py-3.5 px-4">
-                        <span className="inline-flex items-center gap-1.5 text-xs text-emerald-700 font-bold">
-                          <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                          Active
+                        <span className={`inline-flex items-center gap-1.5 text-xs font-bold ${emp.isActive ? 'text-emerald-700' : 'text-neutral-500'}`}>
+                          <span className={`w-2 h-2 rounded-full ${emp.isActive ? 'bg-emerald-500' : 'bg-neutral-400'}`} />
+                          {emp.isActive ? 'Active' : 'Inactive'}
                         </span>
                       </td>
 
                       {/* Action Buttons */}
                       <td className="py-3.5 px-4 text-right">
                         <div className="flex items-center justify-end gap-2">
+                          <Link
+                            to={`/attendance?search=${encodeURIComponent(emp.employeeId || emp.name)}`}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition-colors"
+                            title="View complete login/logout times and attendance"
+                          >
+                            <Clock className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Logins & Attendance</span>
+                          </Link>
+
                           <Button
                             size="sm"
                             variant="secondary"
@@ -700,7 +711,7 @@ export function EmployeeManagementPage() {
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
         title="Add New Employee"
-        subtitle="Provision an employee account in MongoDB with mobile login and dedicated role clearance."
+        subtitle="Provision an employee account in MongoDB. A unique Employee ID is generated for sign-in."
         width="lg"
       >
         <form onSubmit={handleAddEmployeeSubmit} className="space-y-4">
@@ -721,7 +732,7 @@ export function EmployeeManagementPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="text-xs font-bold text-neutral-800 block mb-1">
-                Mobile Number (Login ID) *
+                Mobile Number *
               </label>
               <div className="relative">
                 <Phone className="w-4 h-4 text-neutral-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -735,7 +746,7 @@ export function EmployeeManagementPage() {
                 />
               </div>
               <span className="text-[10px] text-neutral-400 mt-1 block">
-                Employee can log in using this 10-digit mobile number.
+                Employee ID is generated automatically and is used with the password to sign in.
               </span>
             </div>
 
@@ -803,7 +814,7 @@ export function EmployeeManagementPage() {
               </button>
             </div>
             <input
-              type="text"
+              type="password"
               required
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}

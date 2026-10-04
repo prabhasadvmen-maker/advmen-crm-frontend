@@ -4,6 +4,7 @@ import { WidgetBoundary } from '@/components/system/WidgetBoundary';
 import { Button } from '@/components/ui/Button';
 import { useUIStore } from '@/stores/uiStore';
 import { useSessionStore } from '@/stores/sessionStore';
+import { WhatsAppAutomationPanel } from './WhatsAppAutomationPanel';
 import {
   Sparkles,
   Zap,
@@ -37,10 +38,11 @@ interface AIRecommendation {
 
 export function AICenterPage() {
   const { addToast } = useUIStore();
-  const { organizationName } = useSessionStore();
+  const { organizationName, user } = useSessionStore();
+  const isAdmin = user.role === 'ORG_ADMIN' || user.role === 'SUPER_ADMIN';
 
-  // Active Center Mode Tab: 'PULSE' (Default) or 'AUDIT'
-  const [activeTab, setActiveTab] = useState<'PULSE' | 'AUDIT'>('PULSE');
+  // Active Center Mode Tab: revenue pulse, pipeline audit, or admin WhatsApp drafts.
+  const [activeTab, setActiveTab] = useState<'PULSE' | 'AUDIT' | 'WHATSAPP'>('PULSE');
 
   // ==========================================
   // ADVMEN PULSE STATE (Revenue-Recovery Engine)
@@ -49,6 +51,7 @@ export function AICenterPage() {
   const [selectedIssue, setSelectedIssue] = useState<PulseIssueData | null>(null);
   const [activeDecision, setActiveDecision] = useState<PulseDecisionResponse | null>(null);
   const [isLoadingIssues, setIsLoadingIssues] = useState(false);
+  const [issuesLoadError, setIssuesLoadError] = useState('');
   const [isGeneratingDecision, setIsGeneratingDecision] = useState(false);
   const [isExecutingAction, setIsExecutingAction] = useState(false);
   const [issueFilter, setIssueFilter] = useState<'ALL' | 'OVERDUE_INVOICE' | 'STALLED_DEAL' | 'DORMANT_LEAD'>('ALL');
@@ -63,33 +66,14 @@ export function AICenterPage() {
       const res = await aiApi.getPulseIssues();
       const detected = res?.issues || [];
       setIssues(detected);
+      setIssuesLoadError('');
       if (detected.length > 0 && !selectedIssue) {
         setSelectedIssue(detected[0]);
       }
     } catch {
-      // Fallback demo issues if network/mock error
-      setIssues([
-        {
-          issue_id: 'ISSUE-INV-2026-084',
-          issue_type: 'OVERDUE_INVOICE',
-          entity_id: 'INV-2026-084',
-          customer_name: 'Rajesh Sharma',
-          company_name: 'Vortex Global Tech Ltd',
-          contact_email: 'rajesh.sharma@vortextech.in',
-          contact_phone: '+91 98765 43210',
-          financial_metrics: {
-            amount: 18500,
-            currency: 'INR',
-            formatted_amount: '₹18,500',
-            days_overdue: 14,
-          },
-          detected_at: new Date().toISOString(),
-          metadata: {
-            dueDate: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString(),
-            serviceDescription: 'Enterprise CRM Cloud Subscription (Annual)',
-          },
-        },
-      ]);
+      setIssues([]);
+      setSelectedIssue(null);
+      setIssuesLoadError('Could not load live revenue issues from the database. Retry to load current records.');
     } finally {
       setIsLoadingIssues(false);
     }
@@ -267,14 +251,38 @@ export function AICenterPage() {
             <Sparkles className="w-3.5 h-3.5 text-violet-600" />
             <span>Full Pipeline Audit</span>
           </button>
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('WHATSAPP')}
+              className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
+                activeTab === 'WHATSAPP'
+                  ? 'bg-white text-emerald-700 shadow-xs'
+                  : 'text-neutral-600 hover:text-neutral-900'
+              }`}
+            >
+              <Send className="w-3.5 h-3.5 text-emerald-600" />
+              <span>WhatsApp Approval</span>
+            </button>
+          )}
         </div>
       </div>
+
+      {activeTab === 'WHATSAPP' && isAdmin && <WhatsAppAutomationPanel />}
 
       {/* ============================================================== */}
       {/* TAB 1: ADVMEN PULSE REVENUE-RECOVERY & DECISION ENGINE          */}
       {/* ============================================================== */}
       {activeTab === 'PULSE' && (
         <div className="space-y-6">
+          {issuesLoadError && (
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800">
+              <span>{issuesLoadError}</span>
+              <Button variant="outline" size="xs" onClick={() => void loadPulseIssues()}>
+                Retry
+              </Button>
+            </div>
+          )}
           {/* Top KPI Metrics Strip */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-fib-13">
             <div className="bg-white rounded-xl border border-neutral-200 p-4 shadow-2xs space-y-1">

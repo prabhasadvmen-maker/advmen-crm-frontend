@@ -28,7 +28,6 @@ import {
   Shield,
   PhoneCall,
   Kanban,
-  Zap,
   CreditCard,
   BarChart3,
   Copy,
@@ -37,7 +36,6 @@ import {
   Database,
   Radio,
   Check,
-  Phone,
 } from 'lucide-react';
 
 const AVAILABLE_ROLES: { role: UserRole; label: string; description: string }[] = [
@@ -55,6 +53,7 @@ export function AdminDashboard() {
   const urlTab = searchParams.get('tab');
   const { addToast } = useUIStore();
   const { user: currentUser, organizationName } = useSessionStore();
+  const isSuperAdmin = currentUser.role === 'SUPER_ADMIN';
 
   const [activeTab, setActiveTab] = useState<'overview' | 'tenants' | 'users' | 'security'>(
     urlTab === 'users' || urlTab === 'tenants' || urlTab === 'security' ? urlTab : 'overview'
@@ -62,14 +61,14 @@ export function AdminDashboard() {
 
   useEffect(() => {
     if (urlTab && ['overview', 'tenants', 'users', 'security'].includes(urlTab)) {
-      setActiveTab(urlTab as any);
+      setActiveTab(isSuperAdmin && urlTab === 'tenants' ? 'overview' : urlTab as any);
     }
-  }, [urlTab]);
+  }, [urlTab, isSuperAdmin]);
 
   // Dashboard Database Stats State
   const [dashboardStats, setDashboardStats] = useState<DashboardStatsDto>({
-    activeWorkspaces: 1,
-    provisionedStaffSeats: 4,
+    activeWorkspaces: 0,
+    provisionedStaffSeats: 0,
     totalRevenue: 0,
     totalLeads: 0,
     finalizedLeadsCount: 0,
@@ -103,7 +102,7 @@ export function AdminDashboard() {
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserPhone, setNewUserPhone] = useState('');
   const [newUserRole, setNewUserRole] = useState<UserRole>('SALES_REP');
-  const [newUserPassword, setNewUserPassword] = useState('Emp@12345');
+  const [newUserPassword, setNewUserPassword] = useState('');
   const [newUserDept, setNewUserDept] = useState('Sales & Outreach');
   const [isSubmittingUser, setIsSubmittingUser] = useState(false);
 
@@ -116,166 +115,46 @@ export function AdminDashboard() {
 
   // Fetch Organizations
   const loadTenants = useCallback(async () => {
+    if (isSuperAdmin) {
+      setTenants([]);
+      setIsLoadingTenants(false);
+      return;
+    }
+
     setIsLoadingTenants(true);
     try {
       const data = await organizationsApi.getOrganizations();
-      if (Array.isArray(data) && data.length > 0) {
-        setTenants(data);
-      } else {
-        // Fallback default demo orgs if DB is empty
-        setTenants([
-          {
-            id: 'org_advmen_platform',
-            organizationId: 'org_advmen_platform',
-            name: 'ADVMEN Technologies HQ',
-            slug: 'advmen-hq',
-            tier: 'ENTERPRISE',
-            planTier: 'ENTERPRISE',
-            planStatus: 'ACTIVE',
-            activeUsers: 14,
-            maxUsers: 50,
-            storageGb: 4.2,
-            apiCalls24h: 3420,
-            health: 'HEALTHY',
-            slaStatus: 'COMPLIANT',
-            createdAt: '2026-01-15',
-          },
-          {
-            id: 'org_global_sales_co',
-            organizationId: 'org_global_sales_co',
-            name: 'Global Enterprise Sales Corp',
-            slug: 'global-sales',
-            tier: 'ENTERPRISE_PLUS',
-            planTier: 'ENTERPRISE',
-            planStatus: 'ACTIVE',
-            activeUsers: 28,
-            maxUsers: 100,
-            storageGb: 12.8,
-            apiCalls24h: 9150,
-            health: 'HEALTHY',
-            slaStatus: 'COMPLIANT',
-            createdAt: '2026-02-01',
-          },
-          {
-            id: 'org_nexus_telephony',
-            organizationId: 'org_nexus_telephony',
-            name: 'Nexus BPO & Telecalling Ltd',
-            slug: 'nexus-telephony',
-            tier: 'PRO',
-            planTier: 'BUSINESS',
-            planStatus: 'ACTIVE',
-            activeUsers: 8,
-            maxUsers: 20,
-            storageGb: 2.1,
-            apiCalls24h: 1840,
-            health: 'HEALTHY',
-            slaStatus: 'COMPLIANT',
-            createdAt: '2026-02-18',
-          },
-        ]);
-      }
+      setTenants(Array.isArray(data) ? data : []);
     } catch (err: any) {
       console.warn('Failed to load tenants:', err);
+      addToast({
+        type: 'danger',
+        title: 'Could Not Load Workspaces',
+        message: err?.message || 'Workspace records could not be loaded from the database.',
+      });
     } finally {
       setIsLoadingTenants(false);
     }
-  }, []);
+  }, [addToast, isSuperAdmin]);
 
   // Fetch Users
   const loadUsers = useCallback(async () => {
     setIsLoadingUsers(true);
     try {
       const data = await usersApi.getUsers();
-      if (Array.isArray(data) && data.length > 0) {
-        setUsers(data);
-      } else {
-        // Fallback demo users
-        setUsers([
-          {
-            id: 'usr_super_01',
-            name: 'Platform Super Administrator',
-            email: 'admin@advmen.local',
-            role: 'SUPER_ADMIN',
-            department: 'Executive Operations',
-            organizationId: 'org_advmen_platform',
-            isActive: true,
-            createdAt: '2026-01-15',
-            lastLoginAt: 'Just now',
-          },
-          {
-            id: 'usr_org_01',
-            name: 'Sarah Jenkins',
-            email: 'admin@platform.com',
-            role: 'ORG_ADMIN',
-            department: 'RevOps Leadership',
-            organizationId: 'org_advmen_platform',
-            isActive: true,
-            createdAt: '2026-01-18',
-            lastLoginAt: '12 mins ago',
-          },
-          {
-            id: 'usr_mgr_01',
-            name: 'David Vance',
-            email: 'manager@platform.com',
-            role: 'SALES_MANAGER',
-            department: 'Commercial Sales',
-            organizationId: 'org_advmen_platform',
-            isActive: true,
-            createdAt: '2026-01-20',
-            lastLoginAt: '1 hour ago',
-          },
-          {
-            id: 'usr_rep_01',
-            name: 'Priya Sharma',
-            email: 'rep@platform.com',
-            role: 'SALES_REP',
-            department: 'Direct Sales',
-            organizationId: 'org_advmen_platform',
-            isActive: true,
-            createdAt: '2026-02-01',
-            lastLoginAt: '2 hours ago',
-          },
-          {
-            id: 'usr_tele_01',
-            name: 'Rahul Mehta',
-            email: 'outreach@platform.com',
-            role: 'TELECALLER',
-            department: 'Outbound Telesales',
-            organizationId: 'org_advmen_platform',
-            isActive: true,
-            createdAt: '2026-02-05',
-            lastLoginAt: '35 mins ago',
-          },
-          {
-            id: 'usr_sdr_01',
-            name: 'Chloe Evans',
-            email: 'sdr@platform.com',
-            role: 'MARKETING_SDR',
-            department: 'Growth Marketing',
-            organizationId: 'org_advmen_platform',
-            isActive: true,
-            createdAt: '2026-02-10',
-            lastLoginAt: '4 hours ago',
-          },
-          {
-            id: 'usr_fin_01',
-            name: 'Marcus Brody',
-            email: 'finance@platform.com',
-            role: 'FINANCE_VIEWER',
-            department: 'Billing & Accounting',
-            organizationId: 'org_advmen_platform',
-            isActive: true,
-            createdAt: '2026-02-12',
-            lastLoginAt: 'Yesterday',
-          },
-        ]);
-      }
+      setUsers(Array.isArray(data) ? data : []);
     } catch (err: any) {
       console.warn('Failed to load users:', err);
+      setUsers([]);
+      addToast({
+        type: 'danger',
+        title: 'Could Not Load Employees',
+        message: err?.message || 'Employee records could not be loaded from the database.',
+      });
     } finally {
       setIsLoadingUsers(false);
     }
-  }, []);
+  }, [addToast]);
 
   // Fetch Live Database Stats
   const loadStats = useCallback(async () => {
@@ -287,10 +166,15 @@ export function AdminDashboard() {
       }
     } catch (err) {
       console.warn('Failed to load dashboard stats:', err);
+      addToast({
+        type: 'danger',
+        title: 'Could Not Load Dashboard Data',
+        message: err instanceof Error ? err.message : 'Dashboard metrics could not be loaded.',
+      });
     } finally {
       setIsLoadingStats(false);
     }
-  }, []);
+  }, [addToast]);
 
   useEffect(() => {
     loadTenants();
@@ -341,22 +225,22 @@ export function AdminDashboard() {
   // Handle Provision User
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newUserName.trim() || !newUserPhone.trim()) {
-      addToast({ type: 'danger', title: 'Missing Information', message: 'Employee Name and Mobile/Phone Number are required.' });
+    if (!newUserName.trim() || !newUserEmail.trim() || newUserPassword.length < 6) {
+      addToast({ type: 'danger', title: 'Missing Information', message: 'Employee name, work email, and a password with at least 6 characters are required.' });
       return;
     }
 
     setIsSubmittingUser(true);
     try {
-      const orgId = targetOrgId || currentUser.organizationId || tenants[0]?.organizationId || 'org_advmen_platform';
+      const orgId = targetOrgId || currentUser.organizationId;
       const cleanPhone = newUserPhone.trim();
-      const cleanEmail = newUserEmail.trim() ? newUserEmail.trim().toLowerCase() : `${cleanPhone}@company.crm`;
+      const cleanEmail = newUserEmail.trim().toLowerCase();
 
       const createdUser = await usersApi.createUser({
         name: newUserName.trim(),
         email: cleanEmail,
         phone: cleanPhone,
-        password: newUserPassword || 'Emp@12345',
+        password: newUserPassword,
         role: newUserRole,
         department: newUserDept.trim() || 'Sales & Outreach',
         organizationId: orgId,
@@ -372,13 +256,13 @@ export function AdminDashboard() {
       setNewUserEmail('');
       setNewUserPhone('');
       setNewUserRole('SALES_REP');
-      setNewUserPassword('Emp@12345');
+      setNewUserPassword('');
       setNewUserDept('Sales & Outreach');
 
       addToast({
         type: 'success',
         title: 'Employee Account Created!',
-        message: `${createdUser.name} added to ${newUserDept}. They can now login with mobile: ${cleanPhone}.`,
+        message: `${createdUser.name} was added to ${newUserDept}. Employee ID: ${createdUser.employeeId || 'unavailable'}.`,
       });
     } catch (err: any) {
       addToast({
@@ -427,6 +311,7 @@ export function AdminDashboard() {
     const matchesSearch =
       u.name.toLowerCase().includes(userSearchQuery.toLowerCase()) ||
       u.email.toLowerCase().includes(userSearchQuery.toLowerCase()) ||
+      (u.employeeId && u.employeeId.toLowerCase().includes(userSearchQuery.toLowerCase())) ||
       (u.department && u.department.toLowerCase().includes(userSearchQuery.toLowerCase()));
 
     const matchesRole = userRoleFilter === 'ALL' || u.role === userRoleFilter;
@@ -447,12 +332,16 @@ export function AdminDashboard() {
             <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200 font-mono">
               {currentUser.role === 'SUPER_ADMIN' ? 'ROOT SUPER ADMIN' : 'ORGANIZATION ADMIN'}
             </span>
-            <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-neutral-100 text-neutral-700 border border-neutral-200">
-              {organizationName || currentUser.organizationName || 'ADVMEN Workspace'}
-            </span>
+            {!isSuperAdmin && (
+              <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-neutral-100 text-neutral-700 border border-neutral-200">
+                {organizationName || currentUser.organizationName || 'ADVMEN Workspace'}
+              </span>
+            )}
           </div>
           <p className="text-xs text-neutral-500 max-w-2xl">
-            Centralized governance for multi-tenant workspaces, team seat allocation, role clearances, and RevOps infrastructure health.
+            {isSuperAdmin
+              ? 'Manage employee access, role clearances, and RevOps infrastructure health.'
+              : 'Manage your team, role clearances, and RevOps infrastructure health.'}
           </p>
         </div>
 
@@ -463,7 +352,7 @@ export function AdminDashboard() {
             icon={<RefreshCw className={`w-3.5 h-3.5 ${isLoadingTenants || isLoadingUsers || isLoadingStats ? 'animate-spin' : ''}`} />}
             isLoading={isLoadingTenants || isLoadingUsers || isLoadingStats}
             onClick={() => {
-              loadTenants();
+              if (!isSuperAdmin) loadTenants();
               loadUsers();
               loadStats();
               addToast({ type: 'info', title: 'Refreshed', message: 'Synchronized live database records.' });
@@ -471,17 +360,6 @@ export function AdminDashboard() {
           >
             Sync Data
           </Button>
-
-          {currentUser.role === 'SUPER_ADMIN' && (
-            <Button
-              size="sm"
-              variant="secondary"
-              icon={<Building2 className="w-3.5 h-3.5" />}
-              onClick={() => setIsNewTenantOpen(true)}
-            >
-              + New Workspace
-            </Button>
-          )}
 
           <Button
             size="sm"
@@ -495,7 +373,7 @@ export function AdminDashboard() {
       </div>
 
       {/* Top Level Metric KPIs - Live Database Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-fib-13">
+      <div className={`grid grid-cols-1 sm:grid-cols-2 ${isSuperAdmin ? 'lg:grid-cols-3' : 'lg:grid-cols-4'} gap-fib-13`}>
         <WidgetBoundary name="kpi-admin-arr">
           <KPICard
             label="Total Revenue Won"
@@ -507,16 +385,18 @@ export function AdminDashboard() {
           />
         </WidgetBoundary>
 
-        <WidgetBoundary name="kpi-admin-orgs">
-          <KPICard
-            label="Active Workspaces"
-            value={String(dashboardStats.activeWorkspaces || tenants.length || 1)}
-            delta="100% active"
-            deltaDirection="up"
-            subtext="Tenant organizations"
-            accent="blue"
-          />
-        </WidgetBoundary>
+        {!isSuperAdmin && (
+          <WidgetBoundary name="kpi-admin-orgs">
+            <KPICard
+              label="Active Workspaces"
+              value={String(dashboardStats.activeWorkspaces || tenants.length)}
+              delta="100% active"
+              deltaDirection="up"
+              subtext="Tenant organizations"
+              accent="blue"
+            />
+          </WidgetBoundary>
+        )}
 
         <WidgetBoundary name="kpi-admin-users">
           <KPICard
@@ -566,7 +446,7 @@ export function AdminDashboard() {
             <span>Employees ({users.length})</span>
           </button>
 
-          <button
+          {!isSuperAdmin && <button
             onClick={() => setActiveTab('tenants')}
             className={`pb-3 text-sm font-semibold border-b-2 flex items-center gap-2 transition-all ${
               activeTab === 'tenants'
@@ -576,7 +456,7 @@ export function AdminDashboard() {
           >
             <Building2 className="w-4 h-4" />
             <span>Workspaces ({tenants.length})</span>
-          </button>
+          </button>}
 
           <button
             onClick={() => setActiveTab('security')}
@@ -667,24 +547,6 @@ export function AdminDashboard() {
                 </div>
                 <p className="text-xs text-neutral-500 leading-snug">
                   Employee raised inquiries, prospect queries, and support ticket management.
-                </p>
-              </div>
-
-              <div
-                onClick={() => navigate('/automation')}
-                className="p-4 rounded-xl bg-white border border-neutral-200 hover:border-amber-300 hover:shadow-md transition-all cursor-pointer space-y-2 group"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="p-2 rounded-lg bg-amber-50 text-amber-600 group-hover:bg-amber-600 group-hover:text-white transition-colors">
-                    <Zap className="w-4 h-4" />
-                  </div>
-                  <span className="text-[11px] font-mono text-neutral-400 group-hover:text-amber-600 flex items-center gap-1">
-                    Open Hub <ArrowRight className="w-3 h-3" />
-                  </span>
-                </div>
-                <h4 className="text-sm font-bold text-neutral-900">Automation Builder</h4>
-                <p className="text-xs text-neutral-500 leading-snug">
-                  Lead routing workflows, SLA escalation triggers, and webhook event dispatchers.
                 </p>
               </div>
 
@@ -798,6 +660,7 @@ export function AdminDashboard() {
                   </span>
                 </div>
 
+                {!isSuperAdmin && (
                 <div className="flex items-start justify-between p-2.5 rounded-lg bg-neutral-50 border border-neutral-200">
                   <div className="space-y-0.5">
                     <p className="font-semibold text-neutral-900">
@@ -811,6 +674,7 @@ export function AdminDashboard() {
                     VERIFIED
                   </span>
                 </div>
+                )}
 
                 <div className="flex items-start justify-between p-2.5 rounded-lg bg-neutral-50 border border-neutral-200">
                   <div className="space-y-0.5">
@@ -832,7 +696,7 @@ export function AdminDashboard() {
       )}
 
       {/* TAB 2: TENANTS / WORKSPACES */}
-      {activeTab === 'tenants' && (
+      {activeTab === 'tenants' && !isSuperAdmin && (
         <div className="bg-white rounded-2xl border border-neutral-200 p-6 shadow-sm space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
@@ -975,7 +839,7 @@ export function AdminDashboard() {
               <thead className="bg-neutral-50 text-[11px] font-semibold text-neutral-500 uppercase border-y border-neutral-200">
                 <tr>
                   <th className="py-3 px-4">Employee Name</th>
-                  <th className="py-3 px-4">Mobile (Login ID)</th>
+                  <th className="py-3 px-4">Employee ID (Login ID)</th>
                   <th className="py-3 px-4">Work Email</th>
                   <th className="py-3 px-4">Department</th>
                   <th className="py-3 px-4">Role</th>
@@ -1008,8 +872,8 @@ export function AdminDashboard() {
                       </td>
                       <td className="py-3 px-4 font-mono text-[11px] font-bold text-neutral-900">
                         <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200">
-                          <Phone className="w-3 h-3 text-emerald-600" />
-                          {u.phone || '9876543210'}
+                          <UserCheck className="w-3 h-3 text-emerald-600" />
+                          {u.employeeId || 'Not assigned'}
                         </span>
                       </td>
                       <td className="py-3 px-4 font-mono text-[11px] text-neutral-600">
@@ -1024,9 +888,9 @@ export function AdminDashboard() {
                         </span>
                       </td>
                       <td className="py-3 px-4">
-                        <span className="inline-flex items-center gap-1 text-[11px] text-emerald-700 font-semibold font-mono">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                          Active
+                        <span className={`inline-flex items-center gap-1 text-[11px] font-semibold font-mono ${u.isActive ? 'text-emerald-700' : 'text-neutral-500'}`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${u.isActive ? 'bg-emerald-500' : 'bg-neutral-400'}`} />
+                          {u.isActive ? 'Active' : 'Inactive'}
                         </span>
                       </td>
                       <td className="py-3 px-4 text-right">
@@ -1320,6 +1184,7 @@ export function AdminDashboard() {
                   type="email"
                   value={newUserEmail}
                   onChange={(e) => setNewUserEmail(e.target.value)}
+                  required
                   placeholder="e.g. rahul@company.com"
                 />
               </div>
@@ -1358,17 +1223,18 @@ export function AdminDashboard() {
 
                 <Input
                   label="Login Password"
+                  type="password"
                   value={newUserPassword}
                   onChange={(e) => setNewUserPassword(e.target.value)}
                   required
-                  helperText="Default: Emp@12345"
+                  helperText="At least 6 characters"
                 />
               </div>
 
               <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 flex items-start gap-2">
                 <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
                 <span className="text-[11px] leading-relaxed">
-                  After account creation, the employee can log in to the Employee Panel using their <strong>Mobile Number ({newUserPhone || '9876543210'})</strong> and <strong>Password</strong>.
+                  After account creation, share the generated <strong>Employee ID</strong> and <strong>Password</strong> with the employee.
                 </span>
               </div>
 

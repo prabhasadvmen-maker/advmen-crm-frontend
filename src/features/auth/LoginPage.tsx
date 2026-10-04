@@ -1,11 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useSessionStore, ROLE_DASHBOARDS } from '@/stores/sessionStore';
 import { useUIStore } from '@/stores/uiStore';
-import { UserRole } from '@/types';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { Select } from '@/components/ui/Select';
 import {
   Layers,
   Sparkles,
@@ -14,50 +12,25 @@ import {
   PhoneCall,
   ArrowRight,
   TrendingUp,
-  Building2,
   Eye,
   EyeOff,
-  UserCheck,
   KeyRound,
+  AlertCircle,
 } from 'lucide-react';
 import { authApi } from './api/authApi';
-import { organizationsApi, TenantOrgDto } from '../admin/api/organizationsApi';
-
-interface RoleOption {
-  role: UserRole;
-  label: string;
-  description: string;
-  badge: string;
-}
-
-const ROLE_OPTIONS: RoleOption[] = [
-  {
-    role: 'ORG_ADMIN',
-    label: 'Admin Panel',
-    description: 'Full workspace management, leads pipeline & employee roster',
-    badge: 'Admin Control',
-  },
-  {
-    role: 'SALES_REP',
-    label: 'Employee Panel',
-    description: 'Personal assigned leads, deals, phone dialer & daily tasks',
-    badge: 'Employee Access',
-  },
-];
 
 export function LoginPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { addToast } = useUIStore();
-  const { user, isAuthenticated } = useSessionStore();
+  const { user, isAuthenticated, isInitialized, checkAuthSession, logout } = useSessionStore();
 
-  const [selectedRole, setSelectedRole] = useState<UserRole>('ORG_ADMIN');
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [selectedOrg, setSelectedOrg] = useState('');
-  const [availableOrgs, setAvailableOrgs] = useState<TenantOrgDto[]>([]);
   const [rememberMe, setRememberMe] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
+  const [loginError, setLoginError] = useState('');
 
   // Forgot-password modal state
   const [forgotStep, setForgotStep] = useState<'closed' | 'email' | 'reset'>('closed');
@@ -68,45 +41,38 @@ export function LoginPage() {
   const [forgotLoading, setForgotLoading] = useState(false);
   const [sentEmailMsg, setSentEmailMsg] = useState('');
 
-  // Fetch live active tenant organizations from database
+  // Handle explicit logout parameter
   useEffect(() => {
-    organizationsApi.getPublicOrganizations().then((orgs) => {
-      if (Array.isArray(orgs) && orgs.length > 0) {
-        setAvailableOrgs(orgs);
-        setSelectedOrg((current) => {
-          if (current && orgs.some((o) => (o.organizationId || o.id) === current)) {
-            return current;
-          }
-          return orgs[0].organizationId || orgs[0].id;
-        });
-      }
-    }).catch(() => {});
-  }, []);
-
-  // If already authenticated, redirect forward to user's dashboard and replace login in browser history
-  useEffect(() => {
-    if (isAuthenticated) {
-      navigate(ROLE_DASHBOARDS[user.role] || '/leads', { replace: true });
+    if (location.search.includes('logout')) {
+      void logout();
     }
-  }, [isAuthenticated, user.role, navigate]);
+  }, [location.search, logout]);
+
+  useEffect(() => {
+    if (!isInitialized) {
+      void checkAuthSession();
+    }
+  }, [isInitialized, checkAuthSession]);
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanId = identifier.trim();
     if (!cleanId || !password) {
+      setLoginError('Please enter both your Employee ID/email and password.');
       addToast({
         type: 'danger',
         title: 'Missing Fields',
-        message: 'Please enter your registered mobile number or work email, and password.',
+        message: 'Please enter your Employee ID or admin email and password.',
       });
       return;
     }
 
     setIsLoading(true);
+    setLoginError('');
 
     try {
       const isEmail = cleanId.includes('@');
-      // Authenticate credentials against the backend database using phone or email
+      // Authenticate credentials against the backend database using Employee ID, phone, or email.
       const result = await authApi.login({
         identifier: cleanId,
         email: isEmail ? cleanId.toLowerCase() : undefined,
@@ -118,13 +84,19 @@ export function LoginPage() {
         throw new Error('Invalid authentication response from server.');
       }
 
+      const dashboard = ROLE_DASHBOARDS[result.user.role];
+      if (!dashboard) {
+        throw new Error('The server returned an unsupported account role.');
+      }
+
       useSessionStore.getState().setUserSession({
         id: result.user.id,
         name: result.user.name,
         email: result.user.email,
-        role: result.user.role || selectedRole,
+        role: result.user.role,
         organizationId: result.user.organizationId,
-        organizationName: result.user.organizationName || selectedOrg,
+        organizationName: result.user.organizationName || 'ADVMEN Workspace',
+        employeeId: result.user.employeeId,
       });
 
       addToast({
@@ -133,13 +105,18 @@ export function LoginPage() {
         message: `Authenticated as ${result.user.role.replace(/_/g, ' ')}`,
       });
 
-      navigate(ROLE_DASHBOARDS[result.user.role] || '/leads', { replace: true });
+      navigate(dashboard, { replace: true });
     } catch (err: any) {
       console.error('❌ Login failed:', err);
+      const isInvalidCredentials = err?.code === 'INVALID_CREDENTIALS';
+      const message = isInvalidCredentials
+        ? 'The Employee ID/email or password is incorrect. Please check your details and try again.'
+        : err?.message || 'Unable to sign in. Please try again later.';
+      setLoginError(message);
       addToast({
         type: 'danger',
         title: 'Authentication Failed',
-        message: err?.message || 'Invalid mobile number/email or password. Please verify credentials.',
+        message,
       });
     } finally {
       setIsLoading(false);
@@ -314,7 +291,7 @@ export function LoginPage() {
                 </span>
               </div>
               <p className="text-xs text-neutral-500">
-                Enter your credentials to access your organization portal.
+                Employees sign in here with their Employee ID and password.
               </p>
             </div>
 
@@ -322,56 +299,80 @@ export function LoginPage() {
             <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 flex items-start gap-2.5 text-xs text-blue-900 shadow-sm">
               <ShieldCheck className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
               <div className="space-y-0.5">
-                <p className="font-bold">2-Panel System (Admin & Employee)</p>
+                <p className="font-bold">Super Admin & Employee Access</p>
                 <p className="text-[11px] text-blue-700 leading-snug">
-                  Admins can onboard employees with their name, mobile, email, and department. Employees can log in directly using their <strong>Mobile Number</strong> or <strong>Email</strong>.
+                  Super Admins manage employee accounts. Employees sign in using their unique <strong>Employee ID</strong> and password.
                 </p>
               </div>
             </div>
 
-            {/* Role / Portal Selection Custom Dropdown */}
-            <div className="space-y-1.5">
-              <Select
-                label="Select Role / Portal Access"
-                value={selectedRole}
-                onChange={(val) => setSelectedRole(val as UserRole)}
-                options={ROLE_OPTIONS.map((opt) => ({
-                  value: opt.role,
-                  label: opt.label,
-                  description: opt.description,
-                  badge: opt.badge,
-                  icon: <UserCheck className="w-3.5 h-3.5 text-neutral-500" />,
-                }))}
-              />
-
-              {selectedRole === 'SUPER_ADMIN' && (
-                <div className="p-2.5 rounded-lg bg-violet-50 border border-violet-200 text-xs text-violet-900 flex items-center gap-2 mt-2 animate-in fade-in">
-                  <Lock className="w-4 h-4 text-violet-700 shrink-0" />
-                  <span className="text-[11px]">
-                    <strong>Platform Super Admin:</strong> Access requires root administrative privileges.
+            {/* If currently signed in, show status banner with Continue or Sign Out buttons */}
+            {isAuthenticated && user && (
+              <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-950 shadow-sm space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="font-bold text-emerald-900">Active Workspace Session</span>
+                  </div>
+                  <span className="font-mono text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-semibold uppercase">
+                    {(user.role || '').replace(/_/g, ' ')}
                   </span>
                 </div>
-              )}
-            </div>
+                <div className="font-semibold text-neutral-900 text-sm">{user.name} ({user.email})</div>
+                <div className="flex items-center gap-2 pt-1">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="primary"
+                    className="flex-1 text-xs py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-medium"
+                    onClick={() => navigate(ROLE_DASHBOARDS[user.role] || '/leads')}
+                  >
+                    Go to Dashboard
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    className="flex-1 text-xs py-1.5 text-rose-600 hover:text-rose-700 hover:bg-rose-50 border-rose-200"
+                    onClick={async () => {
+                      await logout();
+                      addToast({
+                        type: 'info',
+                        title: 'Signed Out',
+                        message: 'You have been signed out. You can now log in with another account.',
+                      });
+                    }}
+                  >
+                    Sign Out / Switch
+                  </Button>
+                </div>
+              </div>
+            )}
 
             {/* Login Form */}
             <form onSubmit={handleLoginSubmit} className="space-y-4">
               <Input
-                label="Mobile Number or Work Email"
+                label="Employee ID or Work Email"
                 type="text"
                 value={identifier}
-                onChange={(e) => setIdentifier(e.target.value)}
-                placeholder="e.g. 9876543210 or admin@platform.com"
+                onChange={(e) => {
+                  setIdentifier(e.target.value);
+                  if (loginError) setLoginError('');
+                }}
+                placeholder="e.g. EMP-000001 or admin@company.com"
                 required
                 autoComplete="username"
-                helperText="Enter your registered mobile number or email address to sign in"
+                helperText="Use the Employee ID provided by your administrator"
               />
 
               <Input
                 label="Password"
                 type={showPassword ? 'text' : 'password'}
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  if (loginError) setLoginError('');
+                }}
                 placeholder="Enter your password"
                 required
                 autoComplete="current-password"
@@ -393,20 +394,15 @@ export function LoginPage() {
                 }
               />
 
-              {/* Tenant Organization Workspace Custom Dropdown */}
-              <div className="space-y-1">
-                <Select
-                  label="Tenant Organization Workspace"
-                  value={selectedOrg}
-                  onChange={(val) => setSelectedOrg(val)}
-                  options={availableOrgs.map((org) => ({
-                    value: org.organizationId || org.id,
-                    label: org.name,
-                    description: `ID: ${org.organizationId || org.id} • ${org.tier || 'ENTERPRISE'}`,
-                    icon: <Building2 className="w-3.5 h-3.5 text-blue-600" />,
-                  }))}
-                />
-              </div>
+              {loginError && (
+                <div
+                  role="alert"
+                  className="flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2.5 text-xs text-rose-800"
+                >
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-600" />
+                  <span>{loginError}</span>
+                </div>
+              )}
 
               <div className="flex items-center justify-between text-xs pt-1">
                 <label className="flex items-center gap-2 text-neutral-600 cursor-pointer select-none">
@@ -418,15 +414,6 @@ export function LoginPage() {
                   />
                   <span>Remember this device</span>
                 </label>
-                {selectedRole === 'SUPER_ADMIN' && (
-                  <button
-                    type="button"
-                    onClick={() => { setForgotEmail(identifier); setForgotStep('email'); }}
-                    className="text-violet-600 font-semibold text-xs hover:underline focus:outline-none"
-                  >
-                    Forgot password?
-                  </button>
-                )}
               </div>
 
               <Button
@@ -441,40 +428,6 @@ export function LoginPage() {
                 Sign In to Workspace
               </Button>
 
-              {/* Instant 1-Click Demo Logins */}
-              <div className="pt-2 border-t border-neutral-100 space-y-2">
-                <p className="text-[10px] font-bold text-neutral-400 text-center uppercase tracking-wider">
-                  Instant Demo Credentials
-                </p>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIdentifier('admin@platform.com');
-                      setPassword('password123');
-                      setSelectedRole('ORG_ADMIN');
-                      addToast({ type: 'info', title: 'Admin Selected', message: 'Admin credentials autofilled for Admin Panel.' });
-                    }}
-                    className="p-2 rounded-lg border border-neutral-200 hover:border-blue-400 hover:bg-blue-50/50 text-xs font-semibold text-neutral-800 flex items-center justify-center gap-1.5 transition-all"
-                  >
-                    <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
-                    <span>Admin Demo (admin@...)</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIdentifier('9876543210');
-                      setPassword('password123');
-                      setSelectedRole('SALES_REP');
-                      addToast({ type: 'info', title: 'Employee Mobile Selected', message: 'Mobile: 9876543210 autofilled for Employee Panel.' });
-                    }}
-                    className="p-2 rounded-lg border border-neutral-200 hover:border-emerald-400 hover:bg-emerald-50/50 text-xs font-semibold text-neutral-800 flex items-center justify-center gap-1.5 transition-all"
-                  >
-                    <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>Employee Demo (Mobile 9876...)</span>
-                  </button>
-                </div>
-              </div>
             </form>
           </div>
         </div>

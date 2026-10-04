@@ -11,8 +11,10 @@ import { WidgetBoundary } from '@/components/system/WidgetBoundary';
 import { PermissionGate } from '@/components/system/PermissionGate';
 import { Avatar } from '@/components/ui/Avatar';
 import { useUIStore } from '@/stores/uiStore';
-import { leadApi } from '@/features/leads/api/leadApi';
+import { FinalizedLead, leadApi } from '@/features/leads/api/leadApi';
 import { cn } from '@/utils/cn';
+import { useSessionStore } from '@/stores/sessionStore';
+import { invoiceApi } from '@/features/invoices/api/invoiceApi';
 import {
   Plus,
   DollarSign,
@@ -34,37 +36,120 @@ import {
   Eye,
   Kanban,
   X,
+  BadgeCheck,
 } from 'lucide-react';
 
 import { useDeals } from './hooks/useDeals';
 
 export function DealsPage() {
-  const { deals, createDeal, moveStage, deleteDeal, isDeleting, isCreating } = useDeals();
+  const { user } = useSessionStore();
+  const canViewDeals = user.permissions.includes('deal.view');
+  const canViewAllFinalized = ['SUPER_ADMIN', 'ORG_ADMIN', 'SALES_MANAGER'].includes(user.role);
+  const canRecordPayment = user.role === 'SUPER_ADMIN' || user.role === 'ORG_ADMIN';
+  const { deals, createDeal, moveStage, deleteDeal, isDeleting, isCreating } = useDeals(canViewDeals);
   const { addToast } = useUIStore();
   const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
-  const [selectedFinalizedLead, setSelectedFinalizedLead] = useState<any | null>(null);
+  const [selectedFinalizedLead, setSelectedFinalizedLead] = useState<FinalizedLead | null>(null);
   const [isNewDealOpen, setIsNewDealOpen] = useState(false);
   const [dealToDelete, setDealToDelete] = useState<Deal | null>(null);
+  const [paymentLead, setPaymentLead] = useState<FinalizedLead | null>(null);
+  const [paymentAmount, setPaymentAmount] = useState('');
+  const [isRecordingPayment, setIsRecordingPayment] = useState(false);
   const [activeTab, setActiveTab] = useState<'FINALIZED' | 'KANBAN'>('FINALIZED');
   const [stageFilter, setStageFilter] = useState<'ALL' | 'ACTIVE' | 'WON'>('ALL');
 
   // Finalized Leads from Database
-  const [finalizedLeads, setFinalizedLeads] = useState<any[]>([]);
+  const [finalizedLeads, setFinalizedLeads] = useState<FinalizedLead[]>([]);
   const [isLoadingFinalized, setIsLoadingFinalized] = useState(false);
+  const [finalizedError, setFinalizedError] = useState('');
   const [finalizedSearch, setFinalizedSearch] = useState('');
   const [employeeFilter, setEmployeeFilter] = useState('ALL');
 
   const fetchFinalizedData = useCallback(async () => {
     setIsLoadingFinalized(true);
+    setFinalizedError('');
     try {
-      const data = await leadApi.getFinalizedLeads();
+      const data = canViewAllFinalized
+        ? await leadApi.getFinalizedLeads()
+        : await leadApi.getMyFinalizedLeads();
       setFinalizedLeads(data || []);
-    } catch {
-      // non-fatal
+    } catch (error) {
+      setFinalizedError(error instanceof Error ? error.message : 'Unable to load completed leads.');
     } finally {
       setIsLoadingFinalized(false);
     }
-  }, []);
+  }, [canViewAllFinalized]);
+
+  const openPaymentDialog = (lead: FinalizedLead) => {
+    setPaymentLead(lead);
+    setPaymentAmount('');
+  };
+
+  const handleRecordLeadPayment = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!paymentLead) return;
+    const amount = Number(paymentAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      addToast({
+        type: 'warning',
+        title: 'Enter payment amount',
+        message: 'Received amount must be greater than zero.',
+      });
+      return;
+    }
+
+    setIsRecordingPayment(true);
+    try {
+      const payment = await invoiceApi.recordFinalizedLeadPayment(paymentLead.id, amount);
+      const totalAmount = paymentLead.clearedInfo?.dealValue ?? paymentLead.budget ?? 0;
+      const totalPaid = (paymentLead.clearedInfo?.paymentTotalPaid || 0) + amount;
+      const pendingAmount = Math.max(0, totalAmount - totalPaid);
+      setFinalizedLeads((current) =>
+        current.map((lead) =>
+          lead.id === paymentLead.id
+            ? {
+                ...lead,
+                clearedInfo: {
+                  ...lead.clearedInfo,
+                  paymentInvoiceId: payment.id,
+                  paymentRecordedAt: payment.paidAt || new Date().toISOString(),
+                  paymentTotalPaid: totalPaid,
+                },
+              }
+            : lead
+        )
+      );
+      setSelectedFinalizedLead((current) =>
+        current?.id === paymentLead.id
+          ? {
+              ...current,
+              clearedInfo: {
+                ...current.clearedInfo,
+                paymentInvoiceId: payment.id,
+                paymentRecordedAt: payment.paidAt || new Date().toISOString(),
+                paymentTotalPaid: totalPaid,
+              },
+            }
+          : current
+      );
+      setPaymentLead(null);
+      addToast({
+        type: 'success',
+        title: pendingAmount === 0 ? 'Payment completed' : 'Partial payment recorded',
+        message: pendingAmount === 0
+          ? `₹${payment.amount.toLocaleString('en-IN')} saved. The full deal amount is paid.`
+          : `₹${payment.amount.toLocaleString('en-IN')} recorded. ₹${pendingAmount.toLocaleString('en-IN')} is still pending.`,
+      });
+    } catch (error) {
+      addToast({
+        type: 'danger',
+        title: 'Payment not recorded',
+        message: error instanceof Error ? error.message : 'Could not save the payment.',
+      });
+    } finally {
+      setIsRecordingPayment(false);
+    }
+  };
 
   useEffect(() => {
     fetchFinalizedData();
@@ -165,9 +250,7 @@ export function DealsPage() {
     return finalizedLeads.find(
       (fl) =>
         fl.id === selectedDeal.leadId ||
-        fl._id === selectedDeal.leadId ||
         fl.leadId === selectedDeal.leadId ||
-        `${fl.firstName || ''} ${fl.lastName || ''}`.trim().toLowerCase() === selectedDeal.contactName?.toLowerCase() ||
         fl.name?.toLowerCase() === selectedDeal.contactName?.toLowerCase() ||
         fl.company?.toLowerCase() === selectedDeal.company?.toLowerCase()
     );
@@ -274,7 +357,7 @@ export function DealsPage() {
           </span>
         </button>
 
-        <button
+        {canViewDeals && <button
           type="button"
           onClick={() => setActiveTab('KANBAN')}
           className={cn(
@@ -289,7 +372,7 @@ export function DealsPage() {
           <span className={cn('text-[10px] px-1.5 py-0.2 rounded-full font-black', activeTab === 'KANBAN' ? 'bg-blue-800 text-white' : 'bg-blue-100 text-blue-800')}>
             {deals.length}
           </span>
-        </button>
+        </button>}
       </div>
 
       {/* VIEW 1: FINALIZED LEADS (PRIMARY VIEW WITH FULL LEAD DETAILS & EMPLOYEE MESSAGE) */}
@@ -325,7 +408,19 @@ export function DealsPage() {
           </div>
 
           {/* Finalized Leads Compact Table */}
-          {filteredFinalized.length === 0 ? (
+          {finalizedError ? (
+            <div className="rounded-xl border border-rose-200 bg-rose-50 p-6 text-center">
+              <p className="text-sm font-semibold text-rose-800">Completed leads could not be loaded.</p>
+              <p className="mt-1 text-xs text-rose-700">{finalizedError}</p>
+              <Button variant="secondary" size="sm" className="mt-3" onClick={() => void fetchFinalizedData()}>
+                Retry
+              </Button>
+            </div>
+          ) : isLoadingFinalized && finalizedLeads.length === 0 ? (
+            <div className="rounded-xl border border-neutral-200 bg-white p-10 text-center text-sm text-neutral-500">
+              Loading completed leads from the database…
+            </div>
+          ) : filteredFinalized.length === 0 ? (
             <div className="bg-white rounded-2xl border border-neutral-200 p-12 text-center text-neutral-500 shadow-2xs">
               <CheckCircle2 className="w-10 h-10 text-neutral-300 mx-auto mb-2" />
               <p className="font-bold text-neutral-800 text-sm">No Finalized Deals Found</p>
@@ -349,7 +444,10 @@ export function DealsPage() {
                   </thead>
                   <tbody className="divide-y divide-neutral-100">
                     {filteredFinalized.map((lead) => {
-                      const dealVal = lead.clearedInfo?.dealValue || lead.budget || 0;
+                      const dealVal = lead.clearedInfo?.dealValue ?? lead.budget ?? 0;
+                      const totalPaid = lead.clearedInfo?.paymentTotalPaid || 0;
+                      const pendingAmount = Math.max(0, dealVal - totalPaid);
+                      const isFullyPaid = pendingAmount === 0 && dealVal > 0;
                       const empName = lead.clearedInfo?.clearedBy?.name || lead.assignedTo?.name || 'Employee';
                       const addr = lead.address || lead.city || lead.leadAddress || '';
 
@@ -403,9 +501,19 @@ export function DealsPage() {
                           </td>
 
                           <td className="py-3.5 px-4 whitespace-nowrap">
-                            <span className="text-sm font-extrabold text-emerald-700 font-mono">
-                              ₹{dealVal.toLocaleString('en-IN')}
-                            </span>
+                            <div className="space-y-1">
+                              <span className="text-sm font-extrabold text-emerald-700 font-mono">
+                                ₹{dealVal.toLocaleString('en-IN')}
+                              </span>
+                              <div className="space-y-0.5 text-[10px]">
+                                <div className="text-neutral-500">
+                                  Received: <span className="font-semibold text-neutral-700">₹{totalPaid.toLocaleString('en-IN')}</span>
+                                </div>
+                                <div className={cn('font-semibold', pendingAmount > 0 ? 'text-amber-700' : 'text-emerald-700')}>
+                                  Pending: ₹{pendingAmount.toLocaleString('en-IN')}
+                                </div>
+                              </div>
+                            </div>
                           </td>
 
                           <td className="py-3.5 px-4 whitespace-nowrap">
@@ -426,17 +534,92 @@ export function DealsPage() {
                           </td>
 
                           <td className="py-3.5 px-4 text-right whitespace-nowrap">
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedFinalizedLead(lead);
-                              }}
-                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200 transition-colors shadow-2xs"
-                            >
-                              <Eye className="w-3.5 h-3.5 text-emerald-600" />
-                              <span>View Details</span>
-                            </button>
+                            <div className="flex flex-col items-end gap-2">
+                              <div className="inline-flex items-center gap-2">
+                                {canRecordPayment && (
+                                  dealVal <= 0 ? (
+                                    <span className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] font-semibold text-amber-800">
+                                      Set deal value
+                                    </span>
+                                  ) : isFullyPaid ? (
+                                    <span className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-[11px] font-bold text-emerald-800">
+                                      <BadgeCheck className="h-3.5 w-3.5" />
+                                      Done
+                                    </span>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        openPaymentDialog(lead);
+                                      }}
+                                      className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-600 px-2.5 py-1.5 text-xs font-bold text-white transition-colors hover:bg-blue-700"
+                                    >
+                                      <BadgeCheck className="h-3.5 w-3.5" />
+                                      {totalPaid > 0 ? 'Add Payment' : 'Done'}
+                                    </button>
+                                  )
+                                )}
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedFinalizedLead(lead);
+                                }}
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200 transition-colors shadow-2xs"
+                              >
+                                <Eye className="w-3.5 h-3.5 text-emerald-600" />
+                                <span>View Details</span>
+                              </button>
+                              </div>
+                              {paymentLead?.id === lead.id && (
+                                <form
+                                  onSubmit={(event) => {
+                                    event.stopPropagation();
+                                    void handleRecordLeadPayment(event);
+                                  }}
+                                  onClick={(event) => event.stopPropagation()}
+                                  className="flex items-center justify-end gap-1.5"
+                                >
+                                  <label htmlFor={`payment-amount-${lead.id}`} className="sr-only">
+                                    Amount received in INR
+                                  </label>
+                                  <input
+                                    id={`payment-amount-${lead.id}`}
+                                    autoFocus
+                                    type="number"
+                                    min="0.01"
+                                    step="0.01"
+                                    max={pendingAmount}
+                                    required
+                                    value={paymentAmount}
+                                    onChange={(event) => setPaymentAmount(event.target.value)}
+                                    placeholder={`Up to ₹${pendingAmount.toLocaleString('en-IN')}`}
+                                    aria-label={`Amount received in INR. Pending amount ₹${pendingAmount}`}
+                                    className="w-36 rounded-lg border border-neutral-300 px-2.5 py-1.5 text-xs text-neutral-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                                  />
+                                  <button
+                                    type="submit"
+                                    disabled={isRecordingPayment}
+                                    className="rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                  >
+                                    {isRecordingPayment ? 'Saving…' : 'Add amount'}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={isRecordingPayment}
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      setPaymentLead(null);
+                                      setPaymentAmount('');
+                                    }}
+                                    className="rounded-lg border border-neutral-300 px-2.5 py-1.5 text-xs font-semibold text-neutral-600 hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                  >
+                                    Cancel
+                                  </button>
+                                </form>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       );
@@ -450,7 +633,7 @@ export function DealsPage() {
       )}
 
       {/* VIEW 2: KANBAN PIPELINE VIEW */}
-      {activeTab === 'KANBAN' && (
+      {canViewDeals && activeTab === 'KANBAN' && (
         <WidgetBoundary name="pipeline-kanban-board">
           <div className="skeuo-raised-2 bg-white rounded-md border border-neutral-200 p-fib-13 space-y-3">
             {/* Quick Stage View Switcher */}
@@ -574,18 +757,19 @@ export function DealsPage() {
                 </div>
 
                 {/* Phone */}
-                {(selectedDeal.contactPhone || dealFinalizedInfo?.phone || dealFinalizedInfo?.leadPhone) && (
+                {(selectedDeal.contactPhone || dealFinalizedInfo?.phone) && (
                   <div className="flex items-center justify-between bg-neutral-50 px-2.5 py-1.5 rounded-lg border border-neutral-200 col-span-1 sm:col-span-2">
                     <div className="flex items-center gap-2">
                       <Phone className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                       <span className="font-mono font-bold text-neutral-900">
-                        {selectedDeal.contactPhone || dealFinalizedInfo?.phone || dealFinalizedInfo?.leadPhone}
+                        {selectedDeal.contactPhone || dealFinalizedInfo?.phone}
                       </span>
                     </div>
                     <button
                       type="button"
                       onClick={() => {
-                        const num = selectedDeal.contactPhone || dealFinalizedInfo?.phone || dealFinalizedInfo?.leadPhone;
+                        const num = selectedDeal.contactPhone || dealFinalizedInfo?.phone;
+                        if (!num) return;
                         navigator.clipboard.writeText(num);
                         addToast({ type: 'info', title: 'Number Copied', message: `${num} copied to clipboard.` });
                       }}
@@ -621,7 +805,7 @@ export function DealsPage() {
             </div>
 
             {/* Employee Finalization Message Box */}
-            {(selectedDeal.notes || selectedDeal.message || dealFinalizedInfo?.clearedInfo?.notes || dealFinalizedInfo?.notes || dealFinalizedInfo?.clearedInfo?.purpose || dealFinalizedInfo?.purpose) && (
+            {(selectedDeal.notes || selectedDeal.message || dealFinalizedInfo?.clearedInfo?.notes || dealFinalizedInfo?.notes || dealFinalizedInfo?.clearedInfo?.purpose) && (
               <div className="skeuo-raised-1 bg-gradient-to-br from-amber-50 to-orange-50/50 border-2 border-amber-300 rounded-xl p-fib-13 space-y-2">
                 <div className="flex items-center gap-2 text-amber-950 font-extrabold text-xs">
                   <MessageSquare className="w-4 h-4 text-amber-600 shrink-0" />
@@ -629,12 +813,18 @@ export function DealsPage() {
                 </div>
                 <div className="bg-white p-3 rounded-lg border border-amber-200 shadow-2xs">
                   <p className="text-xs text-neutral-900 font-medium whitespace-pre-wrap leading-relaxed">
-                    {selectedDeal.notes || selectedDeal.message || dealFinalizedInfo?.clearedInfo?.notes || dealFinalizedInfo?.notes || dealFinalizedInfo?.clearedInfo?.purpose || dealFinalizedInfo?.purpose}
+                    {selectedDeal.notes || selectedDeal.message || dealFinalizedInfo?.clearedInfo?.notes || dealFinalizedInfo?.notes || dealFinalizedInfo?.clearedInfo?.purpose}
                   </p>
                 </div>
-                {(dealFinalizedInfo?.clearedInfo?.clearedByName || dealFinalizedInfo?.assignedTo?.name) && (
+                {(dealFinalizedInfo?.clearedInfo?.clearedBy?.name ||
+                  dealFinalizedInfo?.clearedInfo?.clearedByName ||
+                  dealFinalizedInfo?.assignedTo?.name) && (
                   <p className="text-[11px] text-amber-800 font-semibold text-right">
-                    — Finalized by {dealFinalizedInfo?.clearedInfo?.clearedByName || dealFinalizedInfo?.assignedTo?.name}
+                    — Finalized by {
+                      dealFinalizedInfo?.clearedInfo?.clearedBy?.name ||
+                      dealFinalizedInfo?.clearedInfo?.clearedByName ||
+                      dealFinalizedInfo?.assignedTo?.name
+                    }
                   </p>
                 )}
               </div>
@@ -865,6 +1055,35 @@ export function DealsPage() {
                 </span>
               </div>
             </div>
+            {(() => {
+              const total = selectedFinalizedLead.clearedInfo?.dealValue ?? selectedFinalizedLead.budget ?? 0;
+              const paid = selectedFinalizedLead.clearedInfo?.paymentTotalPaid || 0;
+              const pending = Math.max(0, total - paid);
+              return (
+                <section className="rounded-xl border border-blue-200 bg-blue-50/60 p-4">
+                  <h4 className="mb-3 text-xs font-bold uppercase tracking-wide text-blue-900">Payment Summary</h4>
+                  <div className="grid grid-cols-3 gap-3 text-xs">
+                    <div>
+                      <span className="block text-neutral-500">Total Amount</span>
+                      <strong className="mt-1 block font-mono text-neutral-900">₹{total.toLocaleString('en-IN')}</strong>
+                    </div>
+                    <div>
+                      <span className="block text-neutral-500">Received</span>
+                      <strong className="mt-1 block font-mono text-emerald-700">₹{paid.toLocaleString('en-IN')}</strong>
+                    </div>
+                    <div>
+                      <span className="block text-neutral-500">Pending</span>
+                      <strong className={cn('mt-1 block font-mono', pending > 0 ? 'text-amber-700' : 'text-emerald-700')}>
+                        ₹{pending.toLocaleString('en-IN')}
+                      </strong>
+                    </div>
+                  </div>
+                  <p className={cn('mt-3 text-[11px] font-semibold', pending > 0 ? 'text-amber-800' : 'text-emerald-800')}>
+                    {pending > 0 ? 'Payment pending' : 'Full payment received'}
+                  </p>
+                </section>
+              );
+            })()}
 
             {/* Customer & Address Details */}
             <div className="bg-neutral-50 rounded-xl border border-neutral-200 p-4 space-y-3 text-xs">
@@ -885,11 +1104,13 @@ export function DealsPage() {
                       <button
                         type="button"
                         onClick={() => {
-                          navigator.clipboard.writeText(selectedFinalizedLead.phone);
+                          const phone = selectedFinalizedLead.phone;
+                          if (!phone) return;
+                          navigator.clipboard.writeText(phone);
                           addToast({
                             type: 'info',
                             title: 'Phone Copied',
-                            message: `${selectedFinalizedLead.phone} copied to clipboard for mobile dialing.`,
+                            message: `${phone} copied to clipboard for mobile dialing.`,
                           });
                         }}
                         className="text-xs text-blue-600 hover:text-blue-700 font-semibold flex items-center gap-1 bg-blue-50 px-2 py-0.5 rounded border border-blue-200"
@@ -944,7 +1165,14 @@ export function DealsPage() {
                 </p>
               </div>
               <div className="flex items-center justify-between text-[11px] text-amber-800 font-semibold pt-1">
-                <span>Finalized by: {selectedFinalizedLead.clearedInfo?.clearedByName || selectedFinalizedLead.assignedTo?.name || 'Employee'}</span>
+                <span>
+                  Finalized by: {
+                    selectedFinalizedLead.clearedInfo?.clearedBy?.name ||
+                    selectedFinalizedLead.clearedInfo?.clearedByName ||
+                    selectedFinalizedLead.assignedTo?.name ||
+                    'Employee'
+                  }
+                </span>
                 <span className="font-mono">
                   {selectedFinalizedLead.clearedInfo?.clearedAt ? new Date(selectedFinalizedLead.clearedInfo.clearedAt).toLocaleString('en-IN') : '—'}
                 </span>

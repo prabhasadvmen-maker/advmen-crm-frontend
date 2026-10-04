@@ -51,7 +51,7 @@ export function useInvoices(params?: InvoiceFilterParams) {
       addToast({
         type: 'success',
         title: 'Payment Registered',
-        message: `${paidInvoice.invoiceNumber} ($${paidInvoice.amount.toLocaleString()}) marked as paid.`,
+        message: `${paidInvoice.invoiceNumber} (₹${paidInvoice.amount.toLocaleString('en-IN')}) marked as paid.`,
       });
     },
     onError: (err: any) => {

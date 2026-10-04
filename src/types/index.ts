@@ -19,6 +19,7 @@ export interface UserSession {
   role: UserRole;
   organizationId: string;
   organizationName: string;
+  employeeId?: string;
   permissions: string[];
   department?: string;
   phone?: string;

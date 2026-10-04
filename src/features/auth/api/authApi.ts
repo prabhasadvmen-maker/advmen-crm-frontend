@@ -1,4 +1,4 @@
-import { apiClient, withFallback } from '@/lib/apiClient';
+import { apiClient, saveAuthTokens, clearAuthTokens, refreshAccessTokenIfExpired } from '@/lib/apiClient';
 import { UserRole, UserSession } from '@/types';
 
 export interface LoginDto {
@@ -26,6 +26,7 @@ export interface AuthResponse {
     role: UserRole;
     organizationId: string;
     organizationName?: string;
+    employeeId?: string;
     avatarUrl?: string;
     permissions?: string[];
     department?: string;
@@ -40,19 +41,20 @@ export interface AuthResponse {
 
 export const authApi = {
   login: async (dto: LoginDto): Promise<AuthResponse> => {
-    return await apiClient.post<AuthResponse>('/auth/login', dto);
+    const result = await apiClient.post<AuthResponse>('/auth/login', dto);
+    if (result.tokens) saveAuthTokens(result.tokens);
+    return result;
   },
 
   signup: async (dto: SignupDto): Promise<AuthResponse> => {
-    return await apiClient.post<AuthResponse>('/auth/signup', dto);
+    const result = await apiClient.post<AuthResponse>('/auth/signup', dto);
+    if (result.tokens) saveAuthTokens(result.tokens);
+    return result;
   },
 
   getMe: async (): Promise<{ user: UserSession } | null> => {
-    return await withFallback(
-      apiClient.get<{ user: UserSession }>('/auth/me'),
-      null,
-      'Auth Session Check'
-    );
+    await refreshAccessTokenIfExpired();
+    return await apiClient.get<{ user: UserSession }>('/auth/me');
   },
 
   logout: async (): Promise<void> => {
@@ -60,6 +62,8 @@ export const authApi = {
       await apiClient.post('/auth/logout', {});
     } catch (err) {
       console.warn('⚠️ Server logout failed, clearing local state:', err);
+    } finally {
+      clearAuthTokens();
     }
   },
 

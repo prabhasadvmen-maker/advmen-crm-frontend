@@ -24,6 +24,7 @@ export function useRealtimeEvents() {
 
     const handleDealStageChanged = (payload: { dealId: string; newStage: string; value: number }) => {
       queryClient.invalidateQueries({ queryKey: ['deals'] });
+      queryClient.invalidateQueries({ queryKey: ['reports', 'overview'] });
       addToast({
         type: 'info',
         title: 'Deal Pipeline Updated',
@@ -40,6 +41,7 @@ export function useRealtimeEvents() {
 
     const handleDealWon = (payload: { dealId: string; value: number }) => {
       queryClient.invalidateQueries({ queryKey: ['deals'] });
+      queryClient.invalidateQueries({ queryKey: ['reports', 'overview'] });
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
       addToast({
         type: 'success',
@@ -66,6 +68,10 @@ export function useRealtimeEvents() {
       });
     };
 
+    const handleLeadDeleted = () => {
+      queryClient.invalidateQueries({ queryKey: ['leads'] });
+    };
+
     const handleCallCompleted = (payload?: any) => {
       queryClient.invalidateQueries({ queryKey: ['calls'] });
       queryClient.invalidateQueries({ queryKey: ['activities'] });
@@ -80,6 +86,7 @@ export function useRealtimeEvents() {
 
     const handleInvoicePaid = (payload: { invoiceId: string; amount: number }) => {
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['reports', 'overview'] });
       addToast({
         type: 'success',
         title: '💰 Payment Settled',
@@ -109,6 +116,7 @@ export function useRealtimeEvents() {
     socket.on('deal:won', handleDealWon);
     socket.on('lead:created', handleLeadUpdated);
     socket.on('lead:score_updated', handleLeadUpdated);
+    socket.on('lead:deleted', handleLeadDeleted);
     socket.on('call:completed', handleCallCompleted);
     socket.on('payment:received', handleInvoicePaid);
     socket.on('task:created', handleTaskCreated);
@@ -118,6 +126,7 @@ export function useRealtimeEvents() {
       socket.off('deal:won', handleDealWon);
       socket.off('lead:created', handleLeadUpdated);
       socket.off('lead:score_updated', handleLeadUpdated);
+      socket.off('lead:deleted', handleLeadDeleted);
       socket.off('call:completed', handleCallCompleted);
       socket.off('payment:received', handleInvoicePaid);
       socket.off('task:created', handleTaskCreated);

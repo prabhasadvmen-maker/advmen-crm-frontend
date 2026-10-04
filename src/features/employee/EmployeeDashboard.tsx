@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { KPICard } from '@/components/patterns/KPICard';
 import { WidgetBoundary } from '@/components/system/WidgetBoundary';
@@ -26,14 +26,21 @@ import {
 export function EmployeeDashboard() {
   const navigate = useNavigate();
   const { user, organizationName } = useSessionStore();
+  const canViewDeals = user.permissions.includes('deal.view');
 
   const { leads = [] } = useLeads();
-  const { deals = [] } = useDeals();
+  const { deals = [] } = useDeals(canViewDeals);
   const { calls = [] } = useCalls();
   const { tasks = [], toggleTask } = useTasks();
 
   const [activeTab, setActiveTab] = useState<'deals' | 'tasks' | 'calls'>('deals');
   const [taskStatusFilter, setTaskStatusFilter] = useState<'ALL' | 'PENDING' | 'COMPLETED'>('ALL');
+
+  useEffect(() => {
+    if (!canViewDeals && activeTab === 'deals') {
+      setActiveTab('tasks');
+    }
+  }, [activeTab, canViewDeals]);
 
   // Filter items specifically assigned to this Employee (or unassigned fallback if none specifically tagged)
   const myLeads = useMemo(() => {
@@ -123,14 +130,16 @@ export function EmployeeDashboard() {
           >
             Open Lead Queries
           </Button>
-          <Button
-            size="sm"
-            variant="primary"
-            icon={<Kanban className="w-3.5 h-3.5" />}
-            onClick={() => navigate('/pipeline')}
-          >
-            My Deals Pipeline
-          </Button>
+          {canViewDeals && (
+            <Button
+              size="sm"
+              variant="primary"
+              icon={<Kanban className="w-3.5 h-3.5" />}
+              onClick={() => navigate('/pipeline')}
+            >
+              My Deals Pipeline
+            </Button>
+          )}
         </div>
       </div>
 
@@ -149,7 +158,7 @@ export function EmployeeDashboard() {
 
       {/* Personal KPI Metrics */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-fib-13">
-        <WidgetBoundary name="kpi-emp-closed-won">
+        {canViewDeals && <WidgetBoundary name="kpi-emp-closed-won">
           <KPICard
             label="Closed Won Deals"
             value={String(myDeals.filter((d) => d.stage === 'WON').length)}
@@ -159,9 +168,9 @@ export function EmployeeDashboard() {
             accent="green"
             icon={<CheckCircle2 className="w-4 h-4 text-emerald-600" />}
           />
-        </WidgetBoundary>
+        </WidgetBoundary>}
 
-        <WidgetBoundary name="kpi-emp-pipeline">
+        {canViewDeals && <WidgetBoundary name="kpi-emp-pipeline">
           <KPICard
             label="My Active Pipeline"
             value={`₹${myTotalPipelineValue.toLocaleString('en-IN')}`}
@@ -171,7 +180,7 @@ export function EmployeeDashboard() {
             accent="green"
             icon={<TrendingUp className="w-4 h-4" />}
           />
-        </WidgetBoundary>
+        </WidgetBoundary>}
 
         <WidgetBoundary name="kpi-emp-tasks">
           <KPICard
@@ -197,17 +206,19 @@ export function EmployeeDashboard() {
       {/* Dynamic Tabs Navigation */}
       <div className="border-b border-neutral-200">
         <nav className="flex space-x-6">
-          <button
-            onClick={() => setActiveTab('deals')}
-            className={`pb-3 text-sm font-semibold border-b-2 flex items-center gap-2 transition-all ${
-              activeTab === 'deals'
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-neutral-500 hover:text-neutral-900'
-            }`}
-          >
-            <Kanban className="w-4 h-4" />
-            <span>My Deals & Pipeline ({myDeals.length})</span>
-          </button>
+          {canViewDeals && (
+            <button
+              onClick={() => setActiveTab('deals')}
+              className={`pb-3 text-sm font-semibold border-b-2 flex items-center gap-2 transition-all ${
+                activeTab === 'deals'
+                  ? 'border-blue-600 text-blue-600'
+                  : 'border-transparent text-neutral-500 hover:text-neutral-900'
+              }`}
+            >
+              <Kanban className="w-4 h-4" />
+              <span>My Deals & Pipeline ({myDeals.length})</span>
+            </button>
+          )}
 
           <button
             onClick={() => setActiveTab('tasks')}
@@ -236,7 +247,7 @@ export function EmployeeDashboard() {
       </div>
 
       {/* TAB 2: MY DEALS PIPELINE */}
-      {activeTab === 'deals' && (
+      {canViewDeals && activeTab === 'deals' && (
         <div className="bg-white rounded-2xl border border-neutral-200 p-6 shadow-sm space-y-4">
           <div className="flex items-center justify-between">
             <div>
@@ -510,11 +521,13 @@ export function EmployeeDashboard() {
                     </tr>
                   ))
                 )}
+
               </tbody>
             </table>
           </div>
         </div>
       )}
+
     </div>
   );
 }

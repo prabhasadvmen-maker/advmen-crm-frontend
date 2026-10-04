@@ -1,9 +1,11 @@
 import { create } from 'zustand';
 import { UserRole, UserSession } from '@/types';
 
+let authSessionCheck: Promise<boolean> | null = null;
+
 export const ROLE_DASHBOARDS: Record<UserRole, string> = {
-  SUPER_ADMIN: '/admin',
-  ORG_ADMIN: '/admin',
+  SUPER_ADMIN: '/roles/super-admin',
+  ORG_ADMIN: '/roles/org-admin',
   SALES_MANAGER: '/employee',
   SALES_REP: '/employee',
   TELECALLER: '/employee',
@@ -15,108 +17,54 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
   SUPER_ADMIN: [
     'admin.view', 'admin.orgs', 'admin.health', 'admin.support', 'admin.audit',
     'lead.view', 'lead.create', 'lead.edit', 'lead.delete', 'lead.export', 'lead.assign',
-    'deal.view', 'deal.create', 'deal.edit', 'deal.delete', 'pipeline.manage',
-    'call.view', 'call.make', 'inbox.view', 'inbox.send', 'task.manage',
-    'proposal.create', 'invoice.view', 'invoice.create', 'invoice.manage',
-    'reports.view', 'ai.use', 'settings.manage', 'billing.manage'
+    'deal.view', 'deal.create', 'deal.edit', 'deal.delete', 'contact.manage', 'company.manage',
+    'call.view', 'call.make', 'call.recording.view', 'communication.send', 'task.manage',
+    'meeting.manage', 'activity.view', 'proposal.manage', 'invoice.manage', 'payment.view',
+    'payment.manage', 'ai.use', 'ai.admin', 'automation.manage', 'report.view', 'report.export',
+    'user.manage', 'organization.manage', 'billing.manage', 'integration.manage', 'audit.view',
+    'superadmin.operate'
   ],
   ORG_ADMIN: [
-    'org.manage', 'team.manage', 'user.manage', 'billing.manage', 'settings.manage', 'integrations.manage',
+    'user.manage', 'organization.manage', 'billing.manage', 'integration.manage', 'audit.view',
     'lead.view', 'lead.create', 'lead.edit', 'lead.delete', 'lead.export', 'lead.assign',
-    'deal.view', 'deal.create', 'deal.edit', 'deal.delete', 'pipeline.manage',
-    'call.view', 'call.make', 'inbox.view', 'inbox.send', 'task.manage',
-    'proposal.create', 'invoice.view', 'invoice.create', 'invoice.manage',
-    'reports.view', 'ai.use'
+    'deal.view', 'deal.create', 'deal.edit', 'deal.delete', 'contact.manage', 'company.manage',
+    'call.view', 'call.make', 'call.recording.view', 'communication.send', 'task.manage',
+    'meeting.manage', 'activity.view', 'proposal.manage', 'invoice.manage', 'payment.view',
+    'payment.manage', 'ai.use', 'ai.admin', 'automation.manage', 'report.view', 'report.export'
   ],
   SALES_MANAGER: [
     'lead.view', 'lead.create', 'lead.edit', 'lead.export',
-    'deal.view', 'deal.create', 'deal.edit', 'pipeline.manage', 'approvals.manage',
-    'team.performance', 'call.view', 'call.make', 'inbox.view', 'task.manage',
-    'proposal.create', 'reports.view', 'ai.use'
+    'deal.view', 'deal.create', 'deal.edit', 'call.view', 'call.make', 'communication.send',
+    'task.manage', 'meeting.manage', 'activity.view', 'proposal.manage', 'invoice.manage',
+    'payment.view', 'report.view', 'report.export', 'ai.use', 'user.manage'
   ],
   SALES_REP: [
     'lead.view', 'lead.create', 'lead.edit',
     'deal.view', 'deal.create', 'deal.edit',
-    'call.view', 'call.make', 'inbox.view', 'inbox.send',
-    'task.manage', 'proposal.create', 'ai.use'
+    'call.view', 'call.make', 'communication.send', 'task.manage', 'meeting.manage',
+    'activity.view', 'proposal.manage', 'ai.use', 'report.view'
   ],
   TELECALLER: [
-    'call.view', 'call.make', 'call.queue', 'lead.view', 'lead.edit_status', 'task.manage'
+    'call.view', 'call.make', 'lead.view', 'lead.edit', 'communication.send',
+    'task.manage', 'activity.view', 'ai.use'
   ],
   MARKETING_SDR: [
-    'lead.view', 'lead.create', 'lead.import',
-    'campaigns.view', 'inbox.view', 'reports.view', 'ai.use'
+    'lead.view', 'lead.create', 'lead.edit', 'contact.manage', 'communication.send',
+    'activity.view', 'report.view', 'ai.use'
   ],
   FINANCE_VIEWER: [
-    'invoice.view', 'invoice.create', 'invoice.manage', 'payment.view',
-    'deal.view', 'reports.view'
+    'invoice.manage', 'payment.view', 'proposal.manage', 'report.view', 'report.export'
   ]
 };
 
-const DEFAULT_USERS: Record<UserRole, UserSession> = {
-  SUPER_ADMIN: {
-    id: 'usr_super_01',
-    name: 'Super Administrator',
-    email: 'admin@platform.com',
-    role: 'SUPER_ADMIN',
-    organizationId: 'org_advmen_platform',
-    organizationName: 'ADVMEN Platform Ops',
-    permissions: ROLE_PERMISSIONS.SUPER_ADMIN
-  },
-  ORG_ADMIN: {
-    id: 'usr_org_admin_01',
-    name: 'Organization Admin',
-    email: 'admin@platform.com',
-    role: 'ORG_ADMIN',
-    organizationId: 'org_advmen_platform',
-    organizationName: 'ADVMEN Platform Ops',
-    permissions: ROLE_PERMISSIONS.ORG_ADMIN
-  },
-  SALES_MANAGER: {
-    id: 'usr_mgr_01',
-    name: 'Sales Manager',
-    email: 'manager@platform.com',
-    role: 'SALES_MANAGER',
-    organizationId: 'org_advmen_platform',
-    organizationName: 'ADVMEN Platform Ops',
-    permissions: ROLE_PERMISSIONS.SALES_MANAGER
-  },
-  SALES_REP: {
-    id: 'usr_rep_01',
-    name: 'Sales Representative',
-    email: 'rep@platform.com',
-    role: 'SALES_REP',
-    organizationId: 'org_advmen_platform',
-    organizationName: 'ADVMEN Platform Ops',
-    permissions: ROLE_PERMISSIONS.SALES_REP
-  },
-  TELECALLER: {
-    id: 'usr_tele_01',
-    name: 'Telecaller Agent',
-    email: 'outreach@platform.com',
-    role: 'TELECALLER',
-    organizationId: 'org_advmen_platform',
-    organizationName: 'ADVMEN Platform Ops',
-    permissions: ROLE_PERMISSIONS.TELECALLER
-  },
-  MARKETING_SDR: {
-    id: 'usr_sdr_01',
-    name: 'Marketing SDR',
-    email: 'sdr@platform.com',
-    role: 'MARKETING_SDR',
-    organizationId: 'org_advmen_platform',
-    organizationName: 'ADVMEN Platform Ops',
-    permissions: ROLE_PERMISSIONS.MARKETING_SDR
-  },
-  FINANCE_VIEWER: {
-    id: 'usr_fin_01',
-    name: 'Finance Viewer',
-    email: 'finance@platform.com',
-    role: 'FINANCE_VIEWER',
-    organizationId: 'org_advmen_platform',
-    organizationName: 'ADVMEN Platform Ops',
-    permissions: ROLE_PERMISSIONS.FINANCE_VIEWER
-  }
+const INITIAL_USER: UserSession = {
+  id: '',
+  name: '',
+  email: '',
+  role: 'ORG_ADMIN',
+  organizationId: '',
+  organizationName: '',
+  permissions: [],
 };
 
 interface SessionState {
@@ -127,33 +75,21 @@ interface SessionState {
   isAuthenticated: boolean;
   isLoading: boolean;
   isInitialized: boolean;
-  switchRole: (role: UserRole) => void;
   switchOrganization: (orgId: string, orgName: string) => void;
   setUserSession: (session: Partial<UserSession>) => void;
   checkAuthSession: () => Promise<boolean>;
+  invalidateSession: () => void;
   logout: () => void;
 }
 
 export const useSessionStore = create<SessionState>((set, get) => ({
-  user: DEFAULT_USERS.ORG_ADMIN,
-  organizationId: DEFAULT_USERS.ORG_ADMIN.organizationId,
-  organizationName: DEFAULT_USERS.ORG_ADMIN.organizationName,
-  permissions: DEFAULT_USERS.ORG_ADMIN.permissions,
+  user: INITIAL_USER,
+  organizationId: '',
+  organizationName: '',
+  permissions: [],
   isAuthenticated: false,
   isLoading: false,
   isInitialized: false,
-
-  switchRole: (role: UserRole) => {
-    const newUser = DEFAULT_USERS[role] || DEFAULT_USERS.ORG_ADMIN;
-    set({
-      user: newUser,
-      organizationId: newUser.organizationId,
-      organizationName: newUser.organizationName,
-      permissions: newUser.permissions,
-      isAuthenticated: true,
-      isInitialized: true,
-    });
-  },
 
   switchOrganization: (orgId: string, orgName: string) => {
     set((state) => ({
@@ -168,7 +104,10 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       let rawRole = ((session.role || state.user.role || '') as string).toUpperCase().replace('-', '_');
       if (rawRole === 'SUPERADMIN') rawRole = 'SUPER_ADMIN';
       if (rawRole === 'ADMIN') rawRole = 'ORG_ADMIN';
-      const role = (ROLE_PERMISSIONS[rawRole as UserRole] ? rawRole : 'SUPER_ADMIN') as UserRole;
+      if (!Object.prototype.hasOwnProperty.call(ROLE_PERMISSIONS, rawRole)) {
+        throw new Error(`The server returned an unsupported user role: ${rawRole}`);
+      }
+      const role = rawRole as UserRole;
 
       const permissions = (session.permissions && session.permissions.length > 0)
         ? session.permissions
@@ -192,27 +131,64 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 
   checkAuthSession: async () => {
+    if (authSessionCheck) return authSessionCheck;
+
     set({ isLoading: true });
-    try {
-      // Dynamic import to avoid circular dependency
-      const { authApi } = await import('@/features/auth/api/authApi');
-      const response = await authApi.getMe();
-      if (response && response.user) {
-        get().setUserSession(response.user);
-        set({ isAuthenticated: true, isInitialized: true, isLoading: false });
-        return true;
+    authSessionCheck = (async () => {
+      try {
+        const { hasAuthTokens } = await import('@/lib/apiClient');
+        if (!hasAuthTokens()) {
+          set({ isAuthenticated: false, isInitialized: true, isLoading: false });
+          return false;
+        }
+
+        // Dynamic import to avoid circular dependency
+        const { authApi } = await import('@/features/auth/api/authApi');
+        const response = await authApi.getMe();
+        if (response && response.user) {
+          get().setUserSession(response.user);
+          set({ isAuthenticated: true, isInitialized: true, isLoading: false });
+          return true;
+        }
+      } catch (err) {
+        const status = typeof err === 'object' && err !== null && 'status' in err
+          ? err.status
+          : undefined;
+        if (status !== 401) {
+          console.warn('Session verification failed:', err);
+        }
       }
-    } catch (err) {
-      console.warn('⚠️ Session verification bypassed or backend offline:', err);
+      set({ isInitialized: true, isLoading: false });
+      return false;
+    })();
+
+    try {
+      return await authSessionCheck;
+    } finally {
+      authSessionCheck = null;
     }
-    set({ isInitialized: true, isLoading: false });
-    return false;
+  },
+
+  invalidateSession: () => {
+    clearSession(set);
   },
 
   logout: () => {
-    set({ isAuthenticated: false });
+    clearSession(set);
     import('@/features/auth/api/authApi').then(({ authApi }) => {
       authApi.logout().catch(() => {});
     });
   }
 }));
+
+function clearSession(set: (partial: Partial<SessionState>) => void): void {
+  set({
+    user: INITIAL_USER,
+    organizationId: '',
+    organizationName: '',
+    permissions: [],
+    isAuthenticated: false,
+    isInitialized: true,
+    isLoading: false,
+  });
+}

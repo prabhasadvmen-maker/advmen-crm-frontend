@@ -3,7 +3,7 @@ import { dealApi, CreateDealPayload } from '../api/dealApi';
 import { Deal, DealStage } from '@/types';
 import { useUIStore } from '@/stores/uiStore';
 
-export function useDeals() {
+export function useDeals(enabled = true) {
   const queryClient = useQueryClient();
   const { addToast } = useUIStore();
 
@@ -12,6 +12,7 @@ export function useDeals() {
     queryFn: () => dealApi.getDeals(),
     staleTime: 1000 * 60 * 2,
     retry: 1,
+    enabled,
   });
 
   const createDealMutation = useMutation({
@@ -83,7 +84,7 @@ export function useDeals() {
   });
 
   return {
-    deals: dealsQuery.data || [],
+    deals: enabled ? dealsQuery.data || [] : [],
     isLoading: dealsQuery.isLoading,
     isError: dealsQuery.isError,
     error: dealsQuery.error,

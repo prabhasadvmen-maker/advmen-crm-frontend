@@ -1,5 +1,5 @@
 import { ReactNode, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { TopBar } from './TopBar';
 import { CommandBar } from '@/components/patterns/CommandBar';
@@ -10,14 +10,22 @@ import { useRealtimeEvents } from '@/hooks/useRealtimeEvents';
 import { cn } from '@/utils/cn';
 
 interface PageShellProps {
-  children: ReactNode;
+  children?: ReactNode;
   loginRedirectPath?: string;
 }
 
-export function PageShell({ children, loginRedirectPath = '/login' }: PageShellProps) {
+export function PageShell({ children, loginRedirectPath }: PageShellProps) {
   const { sidebarCollapsed } = useUIStore();
   const { isAuthenticated, isInitialized, isLoading, checkAuthSession } = useSessionStore();
   const navigate = useNavigate();
+  const location = useLocation();
+  const effectiveLoginRedirectPath = loginRedirectPath || (
+    ['/employees', '/attendance', '/settings', '/admin/dashboard', '/admin/team'].some(
+      (path) => location.pathname === path || location.pathname.startsWith(`${path}/`)
+    )
+      ? '/admin/login'
+      : '/login'
+  );
 
   // Mount real-time WebSocket domain event listener
   useRealtimeEvents();
@@ -26,9 +34,9 @@ export function PageShell({ children, loginRedirectPath = '/login' }: PageShellP
     if (!isInitialized) {
       checkAuthSession();
     } else if (!isAuthenticated && !isLoading) {
-      navigate(loginRedirectPath, { replace: true });
+      navigate(effectiveLoginRedirectPath, { replace: true });
     }
-  }, [isInitialized, isAuthenticated, isLoading, checkAuthSession, navigate, loginRedirectPath]);
+  }, [isInitialized, isAuthenticated, isLoading, checkAuthSession, navigate, effectiveLoginRedirectPath]);
 
   if (!isInitialized || isLoading) {
     return (
@@ -59,7 +67,7 @@ export function PageShell({ children, loginRedirectPath = '/login' }: PageShellP
       >
         <TopBar />
         <main className="flex-1 p-fib-13 sm:p-fib-21 max-w-7xl w-full mx-auto space-y-fib-21">
-          {children}
+          {children ?? <Outlet />}
         </main>
       </div>
     </div>

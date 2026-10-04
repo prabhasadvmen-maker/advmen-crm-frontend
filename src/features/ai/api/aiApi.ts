@@ -49,6 +49,31 @@ export interface PipelineAuditResponse {
   };
 }
 
+export interface WhatsAppDraft {
+  _id: string;
+  leadId: string;
+  leadName: string;
+  recipientPhone: string;
+  queryText?: string;
+  outstandingAmount: number;
+  currency: string;
+  message: string;
+  status: 'PENDING_APPROVAL' | 'SENDING' | 'SENT' | 'REJECTED' | 'FAILED' | 'SEND_UNKNOWN';
+  errorMessage?: string;
+  createdAt: string;
+}
+
+export interface WhatsAppConsentLead {
+  _id: string;
+  leadId: string;
+  name: string;
+  phone: string;
+  consent?: {
+    channel?: string;
+    status?: 'GRANTED' | 'REVOKED' | 'OPT_OUT';
+  };
+}
+
 export const aiApi = {
   generateLeadSummary: async (leadId: string): Promise<LeadSummaryResponse> => {
     return await withFallback(
@@ -121,6 +146,44 @@ export const aiApi = {
     record?: any;
   }> => {
     return await apiClient.post('/ai/pulse/execute', { issueId, actionType, notes });
+  },
+
+  listWhatsAppDrafts: async (
+    cursor?: string
+  ): Promise<{ drafts: WhatsAppDraft[]; nextCursor: string | null; hasMore: boolean }> => {
+    const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
+    return await apiClient.get(`/ai/whatsapp/drafts${query}`);
+  },
+
+  searchWhatsAppConsentLeads: async (search: string): Promise<{ leads: WhatsAppConsentLead[] }> => {
+    return await apiClient.get(`/ai/whatsapp/consent-leads?search=${encodeURIComponent(search)}`);
+  },
+
+  updateWhatsAppConsent: async (
+    leadId: string,
+    status: 'GRANTED' | 'REVOKED' | 'OPT_OUT',
+    evidence?: string
+  ): Promise<{ status: string }> => {
+    return await apiClient.put(`/ai/whatsapp/leads/${encodeURIComponent(leadId)}/consent`, {
+      status,
+      evidence,
+    });
+  },
+
+  generateWhatsAppDraftBatch: async (
+    cursor?: string
+  ): Promise<{ created: number; scanned: number; hasMore: boolean; nextCursor: string | null }> => {
+    return await apiClient.post('/ai/whatsapp/drafts/generate-batch', { cursor });
+  },
+
+  approveAndSendWhatsAppDraft: async (
+    draftId: string
+  ): Promise<{ status: string; providerMessageId?: string }> => {
+    return await apiClient.post(`/ai/whatsapp/drafts/${encodeURIComponent(draftId)}/approve-send`, {});
+  },
+
+  rejectWhatsAppDraft: async (draftId: string): Promise<{ status: string }> => {
+    return await apiClient.post(`/ai/whatsapp/drafts/${encodeURIComponent(draftId)}/reject`, {});
   },
 };
 

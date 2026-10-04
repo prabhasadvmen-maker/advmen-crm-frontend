@@ -78,12 +78,23 @@ export function TopBar() {
   };
 
   useEffect(() => {
+    if (user.role === 'SUPER_ADMIN') {
+      setOrganizations([]);
+      return;
+    }
+
     organizationsApi.getOrganizations().then((orgs) => {
       if (Array.isArray(orgs) && orgs.length > 0) {
         setOrganizations(orgs);
       }
-    }).catch(() => {});
-  }, [user.organizationId]);
+    }).catch((error) => {
+      addToast({
+        type: 'danger',
+        title: 'Could Not Load Workspaces',
+        message: error instanceof Error ? error.message : 'Workspace data is unavailable.',
+      });
+    });
+  }, [user.organizationId, user.role, addToast]);
 
   // Auto-collapse open dropdown menus when scrolling outside
   useEffect(() => {
@@ -129,7 +140,7 @@ export function TopBar() {
         </button>
 
         {/* Tenant Organization Switcher */}
-        <div className="relative">
+        {user.role !== 'SUPER_ADMIN' && <div className="relative">
           <button
             onClick={() => setOrgMenuOpen(!orgMenuOpen)}
             className="skeuo-btn-secondary flex items-center gap-fib-8 px-fib-13 py-fib-5 rounded-md text-xs font-semibold text-neutral-800"
@@ -184,7 +195,7 @@ export function TopBar() {
               </div>
             </>
           )}
-        </div>
+        </div>}
       </div>
 
       {/* Center: Command Palette Trigger */}

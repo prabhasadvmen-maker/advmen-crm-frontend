@@ -9,7 +9,6 @@ import {
   ShieldCheck,
   Lock,
   ArrowRight,
-  Building2,
   Eye,
   EyeOff,
   KeyRound,
@@ -17,25 +16,20 @@ import {
   Activity,
   AlertTriangle,
   ArrowLeft,
-  Terminal,
   Cpu,
   Sparkles,
   X,
 } from 'lucide-react';
 import { authApi } from './api/authApi';
-import { organizationsApi, TenantOrgDto } from '../admin/api/organizationsApi';
 
 export function AdminLoginPage() {
   const navigate = useNavigate();
   const { addToast } = useUIStore();
-  const { user, isAuthenticated } = useSessionStore();
+  const { user, isAuthenticated, isInitialized, checkAuthSession } = useSessionStore();
 
-  const [selectedRole, setSelectedRole] = useState<'SUPER_ADMIN' | 'ORG_ADMIN'>('SUPER_ADMIN');
-  const [email, setEmail] = useState('admin@advmen.local');
-  const [password, setPassword] = useState('Advmen@Admin2026!');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [selectedOrg, setSelectedOrg] = useState('');
-  const [availableOrgs, setAvailableOrgs] = useState<TenantOrgDto[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
   // Forgot Password Modal State
@@ -46,35 +40,24 @@ export function AdminLoginPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [forgotLoading, setForgotLoading] = useState(false);
 
-  // Load organizations for Org Admin selection
   useEffect(() => {
-    organizationsApi
-      .getPublicOrganizations()
-      .then((orgs) => {
-        if (Array.isArray(orgs) && orgs.length > 0) {
-          setAvailableOrgs(orgs);
-          setSelectedOrg(orgs[0].organizationId || orgs[0].id);
-        }
-      })
-      .catch(() => {});
-  }, []);
+    if (!isInitialized) {
+      void checkAuthSession();
+    }
+  }, [isInitialized, checkAuthSession]);
 
-  // Redirect if already authenticated as an Admin
+  // This portal is reserved for platform Super Admin accounts.
   useEffect(() => {
-    if (isAuthenticated && (user.role === 'SUPER_ADMIN' || user.role === 'ORG_ADMIN')) {
+    if (isAuthenticated && user.role === 'SUPER_ADMIN') {
       navigate('/admin/dashboard', { replace: true });
+    } else if (isAuthenticated) {
+      navigate('/login', { replace: true });
     }
-  }, [isAuthenticated, user.role, navigate]);
+  }, [isAuthenticated, isInitialized, user.role, navigate]);
 
-  const handleQuickPreset = (role: 'SUPER_ADMIN' | 'ORG_ADMIN') => {
-    setSelectedRole(role);
-    if (role === 'SUPER_ADMIN') {
-      setEmail('admin@advmen.local');
-      setPassword('Advmen@Admin2026!');
-    } else {
-      setEmail('admin@platform.com');
-      setPassword('Admin@12345');
-    }
+  const handleQuickPreset = () => {
+    setEmail('');
+    setPassword('');
   };
 
   const handleAdminLogin = async (e: React.FormEvent) => {
@@ -101,12 +84,12 @@ export function AdminLoginPage() {
         throw new Error('Invalid authentication response from backend server.');
       }
 
-      const userRole = result.user.role || selectedRole;
+      const userRole = result.user.role;
 
-      // 2. Validate that user is actually an Administrator
-      if (userRole !== 'SUPER_ADMIN' && userRole !== 'ORG_ADMIN') {
+      // 2. Validate that the account has platform-level administrator access.
+      if (userRole !== 'SUPER_ADMIN') {
         throw new Error(
-          `Access Denied: Account (${result.user.email}) has role '${userRole}'. This portal is strictly reserved for Super Admin and Org Admin.`
+          `Access Denied: Account (${result.user.email}) has role '${userRole}'. This portal is reserved for Super Admin.`
         );
       }
 
@@ -116,8 +99,9 @@ export function AdminLoginPage() {
         name: result.user.name,
         email: result.user.email,
         role: userRole as UserRole,
-        organizationId: result.user.organizationId || selectedOrg,
+        organizationId: result.user.organizationId,
         organizationName: result.user.organizationName || 'ADVMEN Platform Ops',
+        employeeId: result.user.employeeId,
       });
 
       addToast({
@@ -130,23 +114,25 @@ export function AdminLoginPage() {
     } catch (err: any) {
       console.warn('⚠️ Admin login attempt failed:', err);
 
-      // Check if backend returned invalid credentials or connection failure
-      // Provide fallback mock session if running in local sandbox without backend seed
+      // Distinguish an authorization failure from a failed database-backed login.
       if (err?.message?.includes('Access Denied')) {
         addToast({
           type: 'danger',
           title: 'Admin Clearance Denied',
           message: err.message,
         });
-      } else {
-        // Fallback for immediate UI testability
-        useSessionStore.getState().switchRole(selectedRole);
+      } else if (err?.code === 'INVALID_CREDENTIALS') {
         addToast({
-          type: 'warning',
-          title: 'Direct Admin Access Granted',
-          message: `Logged in as ${selectedRole.replace(/_/g, ' ')}. Connecting to Admin Command Center...`,
+          type: 'danger',
+          title: 'Login Details Galat Hain',
+          message: 'Admin email ya password galat hai. Dobara check karke try karein.',
         });
-        navigate('/admin/dashboard', { replace: true });
+      } else {
+        addToast({
+          type: 'danger',
+          title: 'Admin Login Failed',
+          message: err?.message || 'Could not verify administrator credentials with the server.',
+        });
       }
     } finally {
       setIsLoading(false);
@@ -267,7 +253,7 @@ export function AdminLoginPage() {
                 </span>
               </h1>
               <p className="text-sm text-slate-400 leading-relaxed">
-                Dedicated management gateway for Platform Super Admins and Organization Administrators. Manage company workspaces, provision staff seats, and monitor RevOps infrastructure.
+                Dedicated administrator gateway to provision staff, manage access, and monitor RevOps infrastructure.
               </p>
             </div>
 
@@ -302,27 +288,11 @@ export function AdminLoginPage() {
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
-                  onClick={() => handleQuickPreset('SUPER_ADMIN')}
-                  className={`text-xs px-3 py-1.5 rounded-lg border font-mono transition-all flex items-center gap-1.5 ${
-                    selectedRole === 'SUPER_ADMIN'
-                      ? 'bg-blue-600/30 border-blue-500 text-blue-300'
-                      : 'bg-slate-800/80 border-slate-700 text-slate-400 hover:text-white'
-                  }`}
+                  onClick={handleQuickPreset}
+                  className="text-xs px-3 py-1.5 rounded-lg border font-mono transition-all flex items-center gap-1.5 bg-blue-600/30 border-blue-500 text-blue-300"
                 >
                   <Cpu className="w-3.5 h-3.5 text-blue-400" />
                   <span>Platform Super Admin</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleQuickPreset('ORG_ADMIN')}
-                  className={`text-xs px-3 py-1.5 rounded-lg border font-mono transition-all flex items-center gap-1.5 ${
-                    selectedRole === 'ORG_ADMIN'
-                      ? 'bg-indigo-600/30 border-indigo-500 text-indigo-300'
-                      : 'bg-slate-800/80 border-slate-700 text-slate-400 hover:text-white'
-                  }`}
-                >
-                  <Building2 className="w-3.5 h-3.5 text-indigo-400" />
-                  <span>Organization Admin</span>
                 </button>
               </div>
             </div>
@@ -346,7 +316,7 @@ export function AdminLoginPage() {
                   </p>
                 </div>
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/30 font-mono">
-                  {selectedRole === 'SUPER_ADMIN' ? 'ROOT' : 'ORG_HQ'}
+                  ROOT
                 </span>
               </div>
 
@@ -358,60 +328,14 @@ export function AdminLoginPage() {
                     <span>Administrative Clearance Level</span>
                     <span className="text-[10px] text-slate-500 font-mono">Required</span>
                   </label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handleQuickPreset('SUPER_ADMIN')}
-                      className={`p-2.5 rounded-xl border text-left transition-all ${
-                        selectedRole === 'SUPER_ADMIN'
-                          ? 'bg-blue-950/60 border-blue-500 text-white shadow-sm'
-                          : 'bg-slate-950/40 border-slate-800 text-slate-400 hover:border-slate-700'
-                      }`}
-                    >
-                      <div className="font-bold text-xs flex items-center gap-1.5 text-blue-400">
-                        <Terminal className="w-3.5 h-3.5" />
-                        Super Admin
-                      </div>
-                      <div className="text-[10px] text-slate-500 mt-0.5">Cross-tenant root</div>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => handleQuickPreset('ORG_ADMIN')}
-                      className={`p-2.5 rounded-xl border text-left transition-all ${
-                        selectedRole === 'ORG_ADMIN'
-                          ? 'bg-indigo-950/60 border-indigo-500 text-white shadow-sm'
-                          : 'bg-slate-950/40 border-slate-800 text-slate-400 hover:border-slate-700'
-                      }`}
-                    >
-                      <div className="font-bold text-xs flex items-center gap-1.5 text-indigo-400">
-                        <Building2 className="w-3.5 h-3.5" />
-                        Org Admin
-                      </div>
-                      <div className="text-[10px] text-slate-500 mt-0.5">Company workspace</div>
-                    </button>
+                  <div className="rounded-xl border border-blue-500 bg-blue-950/60 p-3 text-white">
+                    <div className="font-bold text-xs flex items-center gap-1.5 text-blue-400">
+                      <ShieldCheck className="w-3.5 h-3.5" />
+                      Super Admin
+                    </div>
+                    <div className="text-[10px] text-slate-500 mt-0.5">Cross-tenant root access</div>
                   </div>
                 </div>
-
-                {/* Optional Organization Selector for Org Admin */}
-                {selectedRole === 'ORG_ADMIN' && availableOrgs.length > 0 && (
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-slate-300">
-                      Target Workspace Organization
-                    </label>
-                    <select
-                      value={selectedOrg}
-                      onChange={(e) => setSelectedOrg(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-blue-500"
-                    >
-                      {availableOrgs.map((org) => (
-                        <option key={org.id || org.organizationId} value={org.organizationId || org.id}>
-                          {org.name} ({org.tier || org.planTier || 'Active Workspace'})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
 
                 {/* Email Address */}
                 <div className="space-y-1.5">

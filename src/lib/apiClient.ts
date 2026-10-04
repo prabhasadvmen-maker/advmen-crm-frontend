@@ -3,10 +3,12 @@
  * 
  * Features:
  * - Dynamic relative & multi-device URL resolution
- * - HTTP-Only Cookie Session Credentials
+ * - Unified Single-Promise Token Refresh (Preflight & 401 retry deduplication)
+ * - Multi-Tab Session Persistence (localStorage + sessionStorage dual sync)
+ * - Safe UTF-8 JWT Payload Decoding
  * - Request Correlation ID (X-Request-Id)
- * - Automatic 401 Silent Token Rotation with Queue Lock
- * - Fault-Tolerant Fallback Helpers for Subsystem Isolation
+ * - Tenant Header Injection (X-Target-Organization-Id)
+ * - Graceful Subsystem Fallbacks
  */
 
 import { useSessionStore } from '@/stores/sessionStore';
@@ -80,12 +82,188 @@ const getBaseUrl = (): string => {
 
 const API_BASE_URL = getBaseUrl();
 
-let isRefreshing = false;
-let refreshSubscribers: Array<(tokenRefreshed: boolean) => void> = [];
+let accessToken: string | null = null;
+let refreshRejected = false;
+let activeRefreshPromise: Promise<boolean> | null = null;
 
-function onTokenRefreshed(success: boolean) {
-  refreshSubscribers.forEach((callback) => callback(success));
-  refreshSubscribers = [];
+const ACCESS_TOKEN_KEY = 'salesos.accessToken';
+const REFRESH_TOKEN_KEY = 'salesos.refreshToken';
+
+/**
+ * Safely read a token from localStorage first, then sessionStorage.
+ */
+function readStoredToken(key: string): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    if (window.localStorage) {
+      const val = window.localStorage.getItem(key);
+      if (val) return val;
+    }
+  } catch {}
+  try {
+    if (window.sessionStorage) {
+      return window.sessionStorage.getItem(key);
+    }
+  } catch {}
+  return null;
+}
+
+/**
+ * Write tokens to memory, localStorage, and sessionStorage simultaneously.
+ */
+function writeStoredTokens(tokens: { accessToken: string; refreshToken: string } | null): void {
+  accessToken = tokens?.accessToken || null;
+  if (typeof window === 'undefined') return;
+
+  try {
+    if (window.localStorage) {
+      if (!tokens) {
+        window.localStorage.removeItem(ACCESS_TOKEN_KEY);
+        window.localStorage.removeItem(REFRESH_TOKEN_KEY);
+      } else {
+        window.localStorage.setItem(ACCESS_TOKEN_KEY, tokens.accessToken);
+        window.localStorage.setItem(REFRESH_TOKEN_KEY, tokens.refreshToken);
+      }
+    }
+  } catch {}
+
+  try {
+    if (window.sessionStorage) {
+      if (!tokens) {
+        window.sessionStorage.removeItem(ACCESS_TOKEN_KEY);
+        window.sessionStorage.removeItem(REFRESH_TOKEN_KEY);
+      } else {
+        window.sessionStorage.setItem(ACCESS_TOKEN_KEY, tokens.accessToken);
+        window.sessionStorage.setItem(REFRESH_TOKEN_KEY, tokens.refreshToken);
+      }
+    }
+  } catch {}
+}
+
+/**
+ * Safely decode JWT claims handling Base64URL and UTF-8 multibyte characters.
+ */
+function parseJwtClaims(token: string): { exp?: number; [key: string]: unknown } | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length < 2) return null;
+    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=');
+    const binary = atob(padded);
+    const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
+    const jsonStr = new TextDecoder().decode(bytes);
+    return JSON.parse(jsonStr);
+  } catch {
+    try {
+      const parts = token.split('.');
+      if (parts.length < 2) return null;
+      const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+      const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=');
+      return JSON.parse(atob(padded));
+    } catch {
+      return null;
+    }
+  }
+}
+
+function sendRefreshRequest(refreshToken?: string | null): Promise<Response> {
+  return fetch(`${API_BASE_URL}/auth/refresh`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Request-Id': generateRequestId(),
+    },
+    body: JSON.stringify(refreshToken ? { refreshToken } : {}),
+  });
+}
+
+export function hasAuthTokens(): boolean {
+  return Boolean(
+    accessToken ||
+    readStoredToken(ACCESS_TOKEN_KEY) ||
+    readStoredToken(REFRESH_TOKEN_KEY)
+  );
+}
+
+export function getAccessToken(): string | null {
+  return accessToken || readStoredToken(ACCESS_TOKEN_KEY);
+}
+
+export function getRefreshToken(): string | null {
+  return readStoredToken(REFRESH_TOKEN_KEY);
+}
+
+export function saveAuthTokens(tokens: { accessToken: string; refreshToken: string }): void {
+  refreshRejected = false;
+  writeStoredTokens(tokens);
+}
+
+export function clearAuthTokens(): void {
+  refreshRejected = true;
+  writeStoredTokens(null);
+}
+
+/**
+ * Unified Single-Promise Token Refresh Coordinator.
+ * Prevents concurrent refresh token rotation races and duplicate HTTP requests.
+ */
+async function executeTokenRefresh(): Promise<boolean> {
+  if (activeRefreshPromise) {
+    return activeRefreshPromise;
+  }
+
+  activeRefreshPromise = (async () => {
+    try {
+      const refreshToken = readStoredToken(REFRESH_TOKEN_KEY);
+      let response = await sendRefreshRequest(refreshToken);
+      if (!response.ok && (response.status === 401 || response.status === 403) && refreshToken) {
+        // Fallback to cookie-only refresh if explicit token was rejected
+        response = await sendRefreshRequest();
+      }
+
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+          clearAuthTokens();
+          useSessionStore.getState().invalidateSession();
+        }
+        return false;
+      }
+
+      const result = (await response.json()) as {
+        data?: { tokens?: { accessToken?: string; refreshToken?: string } };
+        tokens?: { accessToken?: string; refreshToken?: string };
+      };
+      const tokens = result.data?.tokens || result.tokens;
+      if (!tokens?.accessToken || !tokens.refreshToken) {
+        return false;
+      }
+
+      writeStoredTokens({ accessToken: tokens.accessToken, refreshToken: tokens.refreshToken });
+      refreshRejected = false;
+      return true;
+    } catch {
+      return false;
+    } finally {
+      activeRefreshPromise = null;
+    }
+  })();
+
+  return activeRefreshPromise;
+}
+
+export async function refreshAccessTokenIfExpired(): Promise<void> {
+  const token = accessToken || readStoredToken(ACCESS_TOKEN_KEY);
+  if (!token) return;
+
+  const claims = parseJwtClaims(token);
+  // If claims cannot be parsed or token expires within the next 60 seconds
+  if (!claims?.exp || claims.exp * 1000 <= Date.now() + 60_000) {
+    const refreshed = await executeTokenRefresh();
+    if (!refreshed && refreshRejected) {
+      throw new ApiError('Session expired. Please log in again.', 401, 'UNAUTHORIZED');
+    }
+  }
 }
 
 export interface EnvelopeResponse<T> {
@@ -107,17 +285,27 @@ export async function request<T>(
   options: RequestInit = {},
   keepEnvelope: boolean = false
 ): Promise<T> {
+  // Strip redundant /api/v1 prefix if passed by caller
+  const normalizedEndpoint = endpoint.replace(/^\/?api\/v1\/?/, '/');
   const url = endpoint.startsWith('http')
     ? endpoint
-    : `${API_BASE_URL}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
+    : `${API_BASE_URL}${normalizedEndpoint.startsWith('/') ? '' : '/'}${normalizedEndpoint}`;
 
   const headers = new Headers(options.headers || {});
-  if (!headers.has('Content-Type') && !(options.body instanceof FormData)) {
+  const currentAccessToken = accessToken || readStoredToken(ACCESS_TOKEN_KEY);
+  if (currentAccessToken && !headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${currentAccessToken}`);
+  }
+
+  const isFormData = options.body instanceof FormData;
+  if (!headers.has('Content-Type') && !isFormData && options.body !== undefined) {
     headers.set('Content-Type', 'application/json');
   }
+
   if (!headers.has('X-Request-Id')) {
     headers.set('X-Request-Id', generateRequestId());
   }
+
   if (!headers.has('X-Target-Organization-Id')) {
     try {
       const activeOrgId = useSessionStore.getState()?.organizationId;
@@ -136,64 +324,31 @@ export async function request<T>(
   };
 
   try {
+    if (!/\/auth\/(login|signup|refresh|forgot-password|reset-password)(\/|$)/.test(endpoint)) {
+      await refreshAccessTokenIfExpired();
+      const refreshedAccessToken = accessToken || readStoredToken(ACCESS_TOKEN_KEY);
+      if (refreshedAccessToken) {
+        headers.set('Authorization', `Bearer ${refreshedAccessToken}`);
+      }
+    }
+
     let response = await fetch(url, fetchOptions);
 
-    // Handle 401 Unauthorized with Automatic Silent Refresh Queue
+    // Handle 401 Unauthorized with Automatic Silent Refresh
     if (
       response.status === 401 &&
-      !endpoint.includes('/auth/login') &&
-      !endpoint.includes('/auth/refresh')
+      !/\/auth\/(login|signup|refresh|logout)(\/|$)/.test(endpoint)
     ) {
-      if (!isRefreshing) {
-        isRefreshing = true;
-        try {
-          const refreshRes = await fetch(`${API_BASE_URL}/auth/refresh`, {
-            method: 'POST',
-            credentials: 'include',
-            headers: { 'Content-Type': 'application/json' },
-          });
-
-          if (refreshRes.ok) {
-            isRefreshing = false;
-            onTokenRefreshed(true);
-            // Retry original failed request after successful token refresh
-            return await request<T>(endpoint, options, keepEnvelope);
-          } else {
-            isRefreshing = false;
-            onTokenRefreshed(false);
-            throw new ApiError(
-              'Session expired. Please log in again.',
-              401,
-              'UNAUTHORIZED'
-            );
-          }
-        } catch (refreshErr) {
-          isRefreshing = false;
-          onTokenRefreshed(false);
-          throw new ApiError(
-            'Session expired. Please log in again.',
-            401,
-            'UNAUTHORIZED'
-          );
-        }
-      } else {
-        // Wait for active refresh lock to finish before retrying request
-        return new Promise<T>((resolve, reject) => {
-          refreshSubscribers.push((success) => {
-            if (success) {
-              resolve(request<T>(endpoint, options, keepEnvelope));
-            } else {
-              reject(
-                new ApiError(
-                  'Session expired. Please log in again.',
-                  401,
-                  'UNAUTHORIZED'
-                )
-              );
-            }
-          });
-        });
+      if (refreshRejected) {
+        throw new ApiError('Session expired. Please log in again.', 401, 'UNAUTHORIZED');
       }
+
+      const refreshed = await executeTokenRefresh();
+      if (refreshed) {
+        return await request<T>(endpoint, options, keepEnvelope);
+      }
+
+      throw new ApiError('Session expired. Please log in again.', 401, 'UNAUTHORIZED');
     }
 
     const contentType = response.headers.get('content-type');
@@ -201,14 +356,18 @@ export async function request<T>(
     const data = isJson ? await response.json() : await response.text();
 
     if (!response.ok) {
-      const errorData = isJson ? (data as ApiErrorResponse) : null;
-      throw new ApiError(
-        errorData?.error?.message || response.statusText || 'Request failed',
-        response.status,
-        errorData?.error?.code || 'HTTP_ERROR',
-        errorData?.error?.details,
-        errorData?.error?.requestId
-      );
+      const errorData = isJson && typeof data === 'object' && data !== null ? (data as any) : null;
+      const message =
+        errorData?.error?.message ||
+        (typeof errorData?.message === 'string' ? errorData.message : null) ||
+        (typeof errorData?.error === 'string' ? errorData.error : null) ||
+        response.statusText ||
+        'Request failed';
+      const code = errorData?.error?.code || errorData?.code || 'HTTP_ERROR';
+      const details = errorData?.error?.details || errorData?.details;
+      const requestId = errorData?.error?.requestId || errorData?.requestId;
+
+      throw new ApiError(message, response.status, code, details, requestId);
     }
 
     // Return inner data payload if wrapped in standard ApiResponse envelope
@@ -268,24 +427,45 @@ export const apiClient = {
     request<T>(endpoint, { ...options, method: 'GET' }),
   getWithMeta: <T>(endpoint: string, options?: RequestInit) =>
     request<EnvelopeResponse<T>>(endpoint, { ...options, method: 'GET' }, true),
-  post: <T>(endpoint: string, body?: unknown, options?: RequestInit) =>
-    request<T>(endpoint, {
+  post: <T>(endpoint: string, body?: unknown, options?: RequestInit) => {
+    const finalBody =
+      body !== undefined
+        ? body instanceof FormData
+          ? body
+          : JSON.stringify(body)
+        : options?.body;
+    return request<T>(endpoint, {
       ...options,
       method: 'POST',
-      body: body instanceof FormData ? body : JSON.stringify(body),
-    }),
-  put: <T>(endpoint: string, body?: unknown, options?: RequestInit) =>
-    request<T>(endpoint, {
+      body: finalBody,
+    });
+  },
+  put: <T>(endpoint: string, body?: unknown, options?: RequestInit) => {
+    const finalBody =
+      body !== undefined
+        ? body instanceof FormData
+          ? body
+          : JSON.stringify(body)
+        : options?.body;
+    return request<T>(endpoint, {
       ...options,
       method: 'PUT',
-      body: body instanceof FormData ? body : JSON.stringify(body),
-    }),
-  patch: <T>(endpoint: string, body?: unknown, options?: RequestInit) =>
-    request<T>(endpoint, {
+      body: finalBody,
+    });
+  },
+  patch: <T>(endpoint: string, body?: unknown, options?: RequestInit) => {
+    const finalBody =
+      body !== undefined
+        ? body instanceof FormData
+          ? body
+          : JSON.stringify(body)
+        : options?.body;
+    return request<T>(endpoint, {
       ...options,
       method: 'PATCH',
-      body: body instanceof FormData ? body : JSON.stringify(body),
-    }),
+      body: finalBody,
+    });
+  },
   delete: <T>(endpoint: string, options?: RequestInit) =>
     request<T>(endpoint, { ...options, method: 'DELETE' }),
 };

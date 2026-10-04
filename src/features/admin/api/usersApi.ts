@@ -1,10 +1,11 @@
-import { apiClient, withFallback } from '@/lib/apiClient';
+import { apiClient } from '@/lib/apiClient';
 import { UserRole } from '@/types';
 
 export interface UserDto {
   id: string;
   name: string;
   email: string;
+  employeeId?: string;
   role: UserRole;
   department?: string;
   phone?: string;
@@ -20,7 +21,7 @@ export interface UserDto {
 export interface CreateUserDto {
   name: string;
   email: string;
-  password?: string;
+  password: string;
   role: UserRole;
   department?: string;
   phone?: string;
@@ -45,8 +46,6 @@ export interface UserListResponse {
   total: number;
 }
 
-const FALLBACK_USERS: UserDto[] = [];
-
 export const usersApi = {
   getUsers: async (params?: { organizationId?: string; role?: string; search?: string }): Promise<UserDto[]> => {
     const searchParams = new URLSearchParams();
@@ -56,16 +55,12 @@ export const usersApi = {
 
     const queryStr = searchParams.toString() ? `?${searchParams.toString()}` : '';
 
-    const res = await withFallback(
-      apiClient.get<any>(`/users${queryStr}`),
-      FALLBACK_USERS,
-      'User Roster'
-    );
+    const res = await apiClient.get<any>(`/users${queryStr}`);
 
     if (Array.isArray(res)) return res;
     if (res && Array.isArray((res as any).users)) return (res as any).users;
     if (res && Array.isArray((res as any).items)) return (res as any).items;
-    return FALLBACK_USERS;
+    throw new Error('The server returned an invalid employee list.');
   },
 
   getUserById: async (id: string): Promise<UserDto> => {

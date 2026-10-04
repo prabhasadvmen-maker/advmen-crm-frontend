@@ -19,6 +19,40 @@ export interface PaginatedLeadsResult {
   hasNextPage: boolean;
 }
 
+export interface FinalizedLead {
+  id: string;
+  leadId?: string;
+  name: string;
+  company?: string;
+  phone?: string;
+  email?: string;
+  city?: string;
+  address?: string;
+  leadAddress?: string;
+  customFields?: Record<string, unknown>;
+  status: string;
+  assignedTo?: { id?: string; name: string };
+  ownerId?: string;
+  budget?: number;
+  estimatedValue?: number;
+  notes?: string;
+  message?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  clearedInfo: {
+    clearedAt: string;
+    purpose: string;
+    notes?: string;
+    message?: string;
+    dealValue?: number;
+    clearedBy?: { id: string; name: string };
+    clearedByName?: string;
+    paymentInvoiceId?: string;
+    paymentRecordedAt?: string;
+    paymentTotalPaid?: number;
+  };
+}
+
 export interface CreateLeadPayload {
   name: string;
   phone: string;
@@ -158,7 +192,7 @@ export const leadApi = {
     unassignedOnly?: boolean;
     all?: boolean;
   }) => {
-    return await apiClient.post<{ count: number }>('/leads/bulk-delete/count', params);
+    return await apiClient.post<{ count: number; protectedCount: number }>('/leads/bulk-delete/count', params);
   },
 
   bulkDelete: async (params: {
@@ -169,7 +203,7 @@ export const leadApi = {
     unassignedOnly?: boolean;
     all?: boolean;
   }) => {
-    return await apiClient.post<{ deletedCount: number }>('/leads/bulk-delete', params);
+    return await apiClient.post<{ deletedCount: number; protectedCount: number }>('/leads/bulk-delete', params);
   },
 
   getLeadById: async (id: string): Promise<Lead | null> => {
@@ -231,8 +265,12 @@ export const leadApi = {
     return normalizeLead(raw);
   },
 
-  getFinalizedLeads: async (): Promise<any[]> => {
-    return await apiClient.get<any[]>('/leads/finalized/all');
+  getFinalizedLeads: async (): Promise<FinalizedLead[]> => {
+    return await apiClient.get<FinalizedLead[]>('/leads/finalized/all');
+  },
+
+  getMyFinalizedLeads: async (): Promise<FinalizedLead[]> => {
+    return await apiClient.get<FinalizedLead[]>('/leads/finalized/mine');
   },
 
   getEmployeeLeadStats: async (): Promise<any[]> => {

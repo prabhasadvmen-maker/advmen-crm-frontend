@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 
 export function InvoicesPage() {
-  const { invoices, createInvoice, recordPayment, deleteInvoice, isCreating, isRecordingPayment, isDeleting } = useInvoices();
+  const { invoices, metrics, createInvoice, recordPayment, deleteInvoice, isCreating, isRecordingPayment, isDeleting } = useInvoices();
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [invoiceToDelete, setInvoiceToDelete] = useState<Invoice | null>(null);
   const [newCompany, setNewCompany] = useState('');
@@ -44,7 +44,7 @@ export function InvoicesPage() {
       recipientName: newCompany,
       recipientEmail: newRecipientEmail || `billing@${newCompany.toLowerCase().replace(/\s+/g, '')}.com`,
       amount: Number(newAmount) || 25000,
-      currency: 'USD',
+      currency: 'INR',
       dueDate: newDueDate,
       lineItems: [
         {
@@ -90,7 +90,7 @@ export function InvoicesPage() {
       align: 'right',
       cell: ({ row }) => (
         <span className="font-bold text-neutral-900 tabular-nums">
-          ${row.amount.toLocaleString()} {row.currency}
+          ₹{row.amount.toLocaleString('en-IN')} {row.currency || 'INR'}
         </span>
       ),
     },
@@ -186,10 +186,10 @@ export function InvoicesPage() {
         <WidgetBoundary name="kpi-total-collected">
           <KPICard
             label="Collected Revenue"
-            value={`$${invoices
-              .filter((i) => i.status === 'PAID')
-              .reduce((s, i) => s + i.amount, 0)
-              .toLocaleString()}`}
+            value={`₹${(metrics?.totalRevenue ?? invoices
+              .filter((i) => i.status === 'PAID' && i.currency === 'INR')
+              .reduce((s, i) => s + i.amount, 0))
+              .toLocaleString('en-IN')}`}
             subtext="Paid invoices"
             accent="green"
             icon={<CreditCard className="w-4 h-4" />}
@@ -198,12 +198,12 @@ export function InvoicesPage() {
 
         <WidgetBoundary name="kpi-pending-invoices">
           <KPICard
-            label="Pending Invoices"
-            value={`$${invoices
-              .filter((i) => i.status === 'SENT')
-              .reduce((s, i) => s + i.amount, 0)
-              .toLocaleString()}`}
-            subtext={`${invoices.filter((i) => i.status === 'SENT').length} Pending`}
+            label="Pending Amount"
+            value={`₹${(metrics?.pendingAmount ?? invoices
+              .filter((i) => (i.status === 'SENT' || i.status === 'OVERDUE') && i.currency === 'INR')
+              .reduce((s, i) => s + i.amount, 0))
+              .toLocaleString('en-IN')}`}
+            subtext={`${metrics?.pendingCount ?? invoices.filter((i) => i.status === 'SENT' || i.status === 'OVERDUE').length} pending payments / invoices`}
             accent="blue"
             icon={<CheckCircle className="w-4 h-4" />}
           />
@@ -212,9 +212,11 @@ export function InvoicesPage() {
         <WidgetBoundary name="kpi-overdue-invoices">
           <KPICard
             label="Overdue Invoices"
-            value={invoices.filter((i) => i.status === 'OVERDUE').length}
-            subtext={invoices.filter((i) => i.status === 'OVERDUE').length ? 'Urgent collection required' : 'No overdue invoices'}
-            accent={invoices.filter((i) => i.status === 'OVERDUE').length ? 'rose' : 'green'}
+            value={metrics?.overdueCount ?? invoices.filter((i) => i.status === 'OVERDUE').length}
+            subtext={metrics?.overdueCount
+              ? `₹${(metrics.overdueAmount || 0).toLocaleString('en-IN')} collection required`
+              : 'No overdue invoices'}
+            accent={(metrics?.overdueCount ?? invoices.filter((i) => i.status === 'OVERDUE').length) ? 'rose' : 'green'}
             icon={<AlertCircle className="w-4 h-4" />}
           />
         </WidgetBoundary>
@@ -222,7 +224,7 @@ export function InvoicesPage() {
         <WidgetBoundary name="kpi-collection-days">
           <KPICard
             label="Total Invoices"
-            value={invoices.length}
+            value={metrics?.totalInvoices ?? invoices.length}
             subtext="Invoiced to date"
             accent="neutral"
             icon={<Calendar className="w-4 h-4" />}

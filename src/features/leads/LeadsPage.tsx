@@ -201,6 +201,7 @@ export function LeadsPage() {
   const [deleteTargetStatus, setDeleteTargetStatus] = useState<string>('WON');
   const [deleteTargetEmployeeId, setDeleteTargetEmployeeId] = useState<string>('ALL');
   const [deletePreviewCount, setDeletePreviewCount] = useState<number | null>(null);
+  const [deleteProtectedCount, setDeleteProtectedCount] = useState(0);
   const [isLoadingDeletePreview, setIsLoadingDeletePreview] = useState(false);
   const [isDeletingBulk, setIsDeletingBulk] = useState(false);
 
@@ -232,8 +233,10 @@ export function LeadsPage() {
       }
       const res = await leadApi.getBulkDeleteCount(params);
       setDeletePreviewCount(res.count);
+      setDeleteProtectedCount(res.protectedCount);
     } catch {
       setDeletePreviewCount(null);
+      setDeleteProtectedCount(0);
     } finally {
       setIsLoadingDeletePreview(false);
     }
@@ -482,9 +485,9 @@ export function LeadsPage() {
     try {
       const res = await leadApi.bulkDelete({ leadIds: selectedIds });
       addToast({
-        type: 'info',
-        title: 'Leads Deleted',
-        message: `${res.deletedCount.toLocaleString()} leads removed from database and employee screens.`,
+        type: res.protectedCount > 0 ? 'warning' : 'info',
+        title: res.protectedCount > 0 ? 'Some Leads Were Protected' : 'Leads Deleted',
+        message: `${res.deletedCount.toLocaleString()} leads deleted.${res.protectedCount > 0 ? ` ${res.protectedCount.toLocaleString()} leads with query history or pending payment were kept.` : ''}`,
       });
       setSelectedIds([]);
       queryClient.invalidateQueries({ queryKey: ['leads'] });
@@ -534,9 +537,9 @@ export function LeadsPage() {
 
       const res = await leadApi.bulkDelete(params);
       addToast({
-        type: 'success',
-        title: 'Leads Deleted Successfully',
-        message: `${res.deletedCount.toLocaleString()} leads permanently removed from CRM & employee screens (${label}).`,
+        type: res.protectedCount > 0 ? 'warning' : 'success',
+        title: res.protectedCount > 0 ? 'Eligible Leads Deleted' : 'Leads Deleted Successfully',
+        message: `${res.deletedCount.toLocaleString()} leads deleted from ${label}.${res.protectedCount > 0 ? ` ${res.protectedCount.toLocaleString()} leads with query history or pending payment were kept.` : ''}`,
       });
       setIsDeleteModalOpen(false);
       queryClient.invalidateQueries({ queryKey: ['leads'] });
@@ -861,7 +864,7 @@ export function LeadsPage() {
           <Button
             variant="secondary"
             size="sm"
-            icon={<Upload className="w-3.5 h-3.5 text-blue-600" />}
+            icon={<Download className="w-3.5 h-3.5 text-blue-600" />}
             onClick={() => navigate('/lead-import')}
             className="border-neutral-300 hover:bg-blue-50 hover:text-blue-700"
           >
@@ -898,7 +901,7 @@ export function LeadsPage() {
             <Button
               variant="secondary"
               size="sm"
-              icon={<Download className="w-3.5 h-3.5" />}
+              icon={<Upload className="w-3.5 h-3.5" />}
               onClick={() =>
                 addToast({
                   type: 'info',
@@ -1850,9 +1853,14 @@ export function LeadsPage() {
                 <span className="text-[11px] text-indigo-700">
                   {isLoadingDeletePreview
                     ? 'Counting matching records in database...'
-                    : deletePreviewCount === 0
+                    : deletePreviewCount === 0 && deleteProtectedCount === 0
                     ? 'No matching leads found (0 leads)'
-                    : `${(deletePreviewCount ?? 0).toLocaleString()} leads will be permanently deleted`}
+                    : `${(deletePreviewCount ?? 0).toLocaleString()} eligible leads will be permanently deleted`}
+                  {!isLoadingDeletePreview && deleteProtectedCount > 0 && (
+                    <span className="mt-1 block text-amber-700">
+                      {deleteProtectedCount.toLocaleString()} leads with query history or pending payment will be kept.
+                    </span>
+                  )}
                 </span>
               </div>
               <span className="text-lg font-mono font-black text-rose-600">
@@ -1864,12 +1872,18 @@ export function LeadsPage() {
               </span>
             </div>
 
-            {deletePreviewCount === 0 && !isLoadingDeletePreview && (
+            {deletePreviewCount === 0 && deleteProtectedCount === 0 && !isLoadingDeletePreview && (
               <div className="p-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800 flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
                 <span>
                   No leads found matching the selected employee or status filter. Please adjust your criteria.
                 </span>
+              </div>
+            )}
+            {deletePreviewCount === 0 && deleteProtectedCount > 0 && !isLoadingDeletePreview && (
+              <div className="p-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800 flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>All matching leads are protected because they have query history or outstanding payments.</span>
               </div>
             )}
 
