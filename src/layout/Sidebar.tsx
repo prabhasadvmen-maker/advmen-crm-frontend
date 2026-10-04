@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { useSessionStore, ROLE_DASHBOARDS, getDashboardForRole } from '@/stores/sessionStore';
+import { useSessionStore, getDashboardForRole } from '@/stores/sessionStore';
 import { useUIStore } from '@/stores/uiStore';
 import { cn } from '@/utils/cn';
 import {
