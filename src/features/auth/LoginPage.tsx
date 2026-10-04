@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useSessionStore, ROLE_DASHBOARDS, getDashboardForRole } from '@/stores/sessionStore';
+import { useSessionStore, getDashboardForRole } from '@/stores/sessionStore';
 import { useUIStore } from '@/stores/uiStore';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';

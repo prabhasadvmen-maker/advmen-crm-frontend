@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useSessionStore, ROLE_DASHBOARDS, getDashboardForRole } from '@/stores/sessionStore';
+import { useSessionStore, getDashboardForRole } from '@/stores/sessionStore';
 import { useUIStore } from '@/stores/uiStore';
 import { useNotificationStore, AppNotification } from '@/stores/notificationStore';
 import { organizationsApi, TenantOrgDto } from '@/features/admin/api/organizationsApi';

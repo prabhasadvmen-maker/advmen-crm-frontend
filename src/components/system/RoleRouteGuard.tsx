@@ -1,5 +1,5 @@
 import { ReactNode } from 'react';
-import { useSessionStore, ROLE_DASHBOARDS, getDashboardForRole } from '@/stores/sessionStore';
+import { useSessionStore, getDashboardForRole } from '@/stores/sessionStore';
 import { UserRole } from '@/types';
 import { ShieldAlert, ArrowLeft, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/Button';

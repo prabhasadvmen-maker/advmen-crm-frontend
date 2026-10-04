@@ -23,7 +23,6 @@ import {
   Settings,
   LogOut,
 } from 'lucide-react';
-import { UserRole } from '@/types';
 
 import { useLeads } from '@/features/leads/hooks/useLeads';
 import { useTasks } from '@/features/tasks/hooks/useTasks';
