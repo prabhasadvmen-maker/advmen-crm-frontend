@@ -8,7 +8,6 @@ import { WidgetBoundary } from '@/components/system/WidgetBoundary';
 import { attendanceApi, AttendanceLoginEvent, AttendanceRecord } from './api/attendanceApi';
 import {
   Clock3,
-  Fingerprint,
   CalendarDays,
   Users,
   RefreshCw,
@@ -420,11 +419,9 @@ export function AttendancePage() {
     }
   }, [urlSearch, records, selectedEmployee, handleOpenEmployeeDetails]);
 
-  const totalSessions = employees.reduce((sum, employee) => sum + employee.loginCount, 0);
   const totalAttendanceDays = employees.reduce((sum, employee) => sum + employee.daysPresent, 0);
   const totalPunchIns = records.flatMap(getLoginEvents).length;
   const totalPunchOuts = records.flatMap(getLoginEvents).filter((e) => Boolean(e.logoutTime)).length;
-  const verifiedSelfies = records.filter((r) => Boolean(r.selfieUrl)).length;
 
   return (
     <div className="space-y-6">
