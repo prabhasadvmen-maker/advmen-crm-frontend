@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useSessionStore, ROLE_DASHBOARDS } from '@/stores/sessionStore';
+import { useSessionStore, ROLE_DASHBOARDS, getDashboardForRole } from '@/stores/sessionStore';
 import { useUIStore } from '@/stores/uiStore';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -54,6 +54,14 @@ export function LoginPage() {
     }
   }, [isInitialized, checkAuthSession]);
 
+  // Auto-redirect if already signed in (unless deliberately logging out)
+  useEffect(() => {
+    if (isAuthenticated && user && !location.search.includes('logout')) {
+      const targetDashboard = getDashboardForRole(user.role);
+      navigate(targetDashboard, { replace: true });
+    }
+  }, [isAuthenticated, user, location.search, navigate]);
+
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanId = identifier.trim();
@@ -84,10 +92,7 @@ export function LoginPage() {
         throw new Error('Invalid authentication response from server.');
       }
 
-      const dashboard = ROLE_DASHBOARDS[result.user.role];
-      if (!dashboard) {
-        throw new Error('The server returned an unsupported account role.');
-      }
+      const dashboard = getDashboardForRole(result.user.role);
 
       useSessionStore.getState().setUserSession({
         id: result.user.id,
@@ -325,7 +330,7 @@ export function LoginPage() {
                     size="sm"
                     variant="primary"
                     className="flex-1 text-xs py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-medium"
-                    onClick={() => navigate(ROLE_DASHBOARDS[user.role] || '/leads')}
+                    onClick={() => navigate(getDashboardForRole(user.role))}
                   >
                     Go to Dashboard
                   </Button>

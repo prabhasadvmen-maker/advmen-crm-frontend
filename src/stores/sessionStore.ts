@@ -4,14 +4,24 @@ import { UserRole, UserSession } from '@/types';
 let authSessionCheck: Promise<boolean> | null = null;
 
 export const ROLE_DASHBOARDS: Record<UserRole, string> = {
-  SUPER_ADMIN: '/roles/super-admin',
-  ORG_ADMIN: '/roles/org-admin',
+  SUPER_ADMIN: '/admin/dashboard',
+  ORG_ADMIN: '/employee',
   SALES_MANAGER: '/employee',
   SALES_REP: '/employee',
   TELECALLER: '/employee',
   MARKETING_SDR: '/employee',
   FINANCE_VIEWER: '/employee',
 };
+
+export function getDashboardForRole(role?: string): string {
+  if (!role) return '/employee';
+  const cleanRole = role.toUpperCase().replace(/-/g, '_').trim();
+  if (cleanRole === 'SUPER_ADMIN' || cleanRole === 'SUPERADMIN') {
+    return '/admin/dashboard';
+  }
+  // All other employees / sales staff / managers navigate to Employee Dashboard
+  return '/employee';
+}
 
 export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
   SUPER_ADMIN: [

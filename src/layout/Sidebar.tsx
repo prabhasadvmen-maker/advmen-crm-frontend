@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { useSessionStore, ROLE_DASHBOARDS } from '@/stores/sessionStore';
+import { useSessionStore, ROLE_DASHBOARDS, getDashboardForRole } from '@/stores/sessionStore';
 import { useUIStore } from '@/stores/uiStore';
 import { cn } from '@/utils/cn';
 import {
@@ -59,9 +59,9 @@ export function Sidebar() {
     }
   }, [mobileSidebarOpen]);
 
-  const userRoleUpper = ((user?.role || '') as string).toUpperCase().replace('-', '_');
+  const userRoleUpper = ((user?.role || '') as string).toUpperCase().replace(/-/g, '_').trim();
   const normalizedRole = userRoleUpper === 'SUPERADMIN' ? 'SUPER_ADMIN' : userRoleUpper === 'ADMIN' ? 'ORG_ADMIN' : userRoleUpper;
-  const userRoleDashboardPath = ROLE_DASHBOARDS[normalizedRole as UserRole] || (normalizedRole === 'SUPER_ADMIN' || normalizedRole === 'ORG_ADMIN' ? '/admin' : '/leads');
+  const userRoleDashboardPath = getDashboardForRole(normalizedRole);
 
   const openQueriesCount = leads.reduce((acc, l) => acc + (l.queries?.filter((q) => q.status === 'OPEN').length || 0), 0);
   const pendingTasksCount = tasks.filter((t) => !t.isCompleted).length;

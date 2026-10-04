@@ -1,5 +1,5 @@
 import { ReactNode } from 'react';
-import { useSessionStore, ROLE_DASHBOARDS } from '@/stores/sessionStore';
+import { useSessionStore, ROLE_DASHBOARDS, getDashboardForRole } from '@/stores/sessionStore';
 import { UserRole } from '@/types';
 import { ShieldAlert, ArrowLeft, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
@@ -64,7 +64,7 @@ export function RoleRouteGuard({ allowedRoles, children }: RoleRouteGuardProps) 
               variant="primary"
               size="sm"
               icon={<ArrowLeft className="w-4 h-4" />}
-              onClick={() => navigate(ROLE_DASHBOARDS[user.role] || '/leads')}
+              onClick={() => navigate(getDashboardForRole(user.role))}
             >
               Return to My Authorized Hub
             </Button>

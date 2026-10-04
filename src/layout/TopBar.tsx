@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useSessionStore, ROLE_DASHBOARDS } from '@/stores/sessionStore';
+import { useSessionStore, ROLE_DASHBOARDS, getDashboardForRole } from '@/stores/sessionStore';
 import { useUIStore } from '@/stores/uiStore';
 import { useNotificationStore, AppNotification } from '@/stores/notificationStore';
 import { organizationsApi, TenantOrgDto } from '@/features/admin/api/organizationsApi';
@@ -384,7 +384,7 @@ export function TopBar() {
                 <button
                   onClick={() => {
                     setUserMenuOpen(false);
-                    navigate(ROLE_DASHBOARDS[user.role] || '/leads');
+                    navigate(getDashboardForRole(user.role));
                   }}
                   className="w-full text-left px-2.5 py-2 rounded-lg text-xs font-semibold text-neutral-700 hover:bg-neutral-100 hover:text-neutral-900 flex items-center gap-2.5 transition-colors"
                 >
