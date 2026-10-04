@@ -51,7 +51,7 @@ export function AdminLoginPage() {
     if (isAuthenticated && user.role === 'SUPER_ADMIN') {
       navigate('/admin/dashboard', { replace: true });
     } else if (isAuthenticated) {
-      navigate('/login', { replace: true });
+      navigate('/employee', { replace: true });
     }
   }, [isAuthenticated, isInitialized, user.role, navigate]);
 

@@ -52,9 +52,13 @@ export function SSOLoginPage() {
           target,
         });
 
-        if (!isMounted) return;
+        // 1. Purge any stale tokens and previous sessions
+        localStorage.removeItem('salesos.accessToken');
+        localStorage.removeItem('salesos.refreshToken');
+        sessionStorage.removeItem('salesos.accessToken');
+        sessionStorage.removeItem('salesos.refreshToken');
 
-        // 1. Persist authentication tokens
+        // 2. Persist fresh authentication tokens
         localStorage.setItem('salesos.accessToken', data.accessToken);
         sessionStorage.setItem('salesos.accessToken', data.accessToken);
         if (data.refreshToken) {
@@ -62,30 +66,36 @@ export function SSOLoginPage() {
           sessionStorage.setItem('salesos.refreshToken', data.refreshToken);
         }
 
-        // 2. Hydrate global user session
-        setUserProfile(data.user);
+        // 3. Resolve role & enforce destination
+        const userRole = ((data.user?.role || '') as string).toUpperCase().replace(/-/g, '_').trim();
+        const isSuperAdmin = userRole === 'SUPER_ADMIN' || userRole === 'SUPERADMIN';
+        const cleanRole = isSuperAdmin ? 'SUPER_ADMIN' : 'SALES_REP';
+        const destination = isSuperAdmin ? '/admin/dashboard' : '/employee';
+
+        // 4. Hydrate global user session
+        setUserProfile({ ...data.user, role: cleanRole });
         useSessionStore.getState().setUserSession({
           id: data.user.id,
           name: data.user.name,
           email: data.user.email,
-          role: data.user.role as any,
+          role: cleanRole as any,
           organizationId: data.user.organizationId,
           organizationName: data.user.organizationName || 'ADVMEN Workspace',
           employeeId: data.user.employeeId,
+          department: data.user.department || 'Direct Sales & Outreach',
           permissions: data.user.permissions || [],
         });
 
-        // 3. Mark success and trigger background session check
+        // 5. Mark success and trigger background session check
         setStatus('success');
         void useSessionStore.getState().checkAuthSession();
 
-        // 4. Smooth transition to dashboard
-        const destination = data.redirectUrl || target;
+        // 6. Smooth transition to dashboard
         setTimeout(() => {
           if (isMounted) {
             navigate(destination, { replace: true });
           }
-        }, 800);
+        }, 600);
       } catch (err: any) {
         if (!isMounted) return;
         console.error('SSO verification failed:', err);

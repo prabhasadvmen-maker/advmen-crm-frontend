@@ -111,11 +111,12 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
   setUserSession: (session: Partial<UserSession>) => {
     set((state) => {
-      let rawRole = ((session.role || state.user.role || '') as string).toUpperCase().replace('-', '_');
+      let rawRole = ((session.role || state.user.role || '') as string).toUpperCase().replace(/-/g, '_').trim();
       if (rawRole === 'SUPERADMIN') rawRole = 'SUPER_ADMIN';
       if (rawRole === 'ADMIN') rawRole = 'ORG_ADMIN';
+      if (rawRole === 'EMPLOYEE' || rawRole === 'STAFF' || rawRole === 'USER' || rawRole === 'AGENT') rawRole = 'SALES_REP';
       if (!Object.prototype.hasOwnProperty.call(ROLE_PERMISSIONS, rawRole)) {
-        throw new Error(`The server returned an unsupported user role: ${rawRole}`);
+        rawRole = 'SALES_REP';
       }
       const role = rawRole as UserRole;
 

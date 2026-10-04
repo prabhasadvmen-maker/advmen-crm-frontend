@@ -11,7 +11,6 @@ export function SSORedirectPage() {
   useEffect(() => {
     const token = searchParams.get('token');
     const refreshToken = searchParams.get('refreshToken');
-    const target = searchParams.get('target') || '/employee';
 
     if (!token) {
       setError('No valid authentication token provided. Please sign in manually.');
@@ -19,7 +18,13 @@ export function SSORedirectPage() {
     }
 
     try {
-      // 1. Store tokens in localStorage and sessionStorage
+      // 1. Purge any previous session tokens
+      localStorage.removeItem('salesos.accessToken');
+      localStorage.removeItem('salesos.refreshToken');
+      sessionStorage.removeItem('salesos.accessToken');
+      sessionStorage.removeItem('salesos.refreshToken');
+
+      // 2. Store fresh tokens in localStorage and sessionStorage
       localStorage.setItem('salesos.accessToken', token);
       sessionStorage.setItem('salesos.accessToken', token);
       if (refreshToken) {
@@ -27,25 +32,31 @@ export function SSORedirectPage() {
         sessionStorage.setItem('salesos.refreshToken', refreshToken);
       }
 
-      // 2. Safely decode JWT payload to update session state immediately
+      // 3. Safely decode JWT payload to update session state immediately
+      let userRole = 'SALES_REP';
       const parts = token.split('.');
       if (parts.length === 3) {
         const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+        const rawRole = ((payload.role || '') as string).toUpperCase().replace(/-/g, '_').trim();
+        userRole = (rawRole === 'SUPER_ADMIN' || rawRole === 'SUPERADMIN') ? 'SUPER_ADMIN' : 'SALES_REP';
         useSessionStore.getState().setUserSession({
           id: payload.id,
           name: payload.name,
           email: payload.email,
-          role: payload.role || 'SALES_REP',
+          role: userRole as any,
           organizationId: payload.organizationId,
           organizationName: payload.organizationName || 'ADVMEN Workspace',
           employeeId: payload.employeeId,
+          department: payload.department,
           permissions: payload.permissions || [],
         });
       }
 
-      // 3. Complete authentication session check and redirect to Employee Dashboard
+      // 4. Complete authentication session check and redirect to Role Dashboard
+      const isSuperAdmin = userRole === 'SUPER_ADMIN';
+      const destination = isSuperAdmin ? '/admin/dashboard' : '/employee';
       void useSessionStore.getState().checkAuthSession();
-      navigate(target, { replace: true });
+      navigate(destination, { replace: true });
     } catch (err: any) {
       console.error('SSO redirection processing failed:', err);
       setError('Could not process authentication session. Please sign in with your credentials.');
