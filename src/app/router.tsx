@@ -1,6 +1,6 @@
 import { createBrowserRouter } from 'react-router-dom';
 import { PageShell } from '@/layout/PageShell';
-import { LoginPage, AdminLoginPage, SSORedirectPage } from '@/features/auth';
+import { LoginPage, AdminLoginPage, SSORedirectPage, SSOLoginPage } from '@/features/auth';
 import { RoleRouteGuard } from '@/components/system/RoleRouteGuard';
 import {
   SuperAdminDashboard,
@@ -55,6 +55,7 @@ export const router = createBrowserRouter([
   { path: '/', element: <LoginPage /> },
   { path: '/login', element: <LoginPage /> },
   { path: '/logout', element: <LogoutHandler /> },
+  { path: '/sso-login', element: <SSOLoginPage /> },
   { path: '/auth/sso', element: <SSORedirectPage /> },
   { path: '/sso', element: <SSORedirectPage /> },
   { path: '/admin/login', element: <AdminLoginPage /> },
