@@ -668,21 +668,20 @@ export function AttendancePage() {
             </Button>
           </div>
         ) : (
-          <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-sm">
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[1000px] text-left text-sm">
-                <thead className="border-b border-neutral-200 bg-neutral-50 text-xs font-semibold uppercase text-neutral-500">
+          <div className="overflow-hidden rounded-2xl border border-neutral-200/90 bg-white shadow-sm">
+            <div className="overflow-x-auto max-h-[750px] relative">
+              <table className="w-full min-w-[1100px] text-left text-xs text-neutral-700">
+                <thead className="sticky top-0 z-10 border-b border-neutral-200 bg-neutral-50/95 text-[11px] font-bold uppercase tracking-wider text-neutral-500 shadow-2xs">
                   <tr>
-                    <th className="px-4 py-3">Selfie Photo</th>
-                    <th className="px-4 py-3">Employee</th>
-                    <th className="px-4 py-3">Date</th>
-                    <th className="px-4 py-3">Login Timing</th>
-                    <th className="px-4 py-3">Logout Timing</th>
-                    <th className="px-4 py-3">Duration</th>
-                    <th className="px-4 py-3">Status</th>
-                    <th className="px-4 py-3">GPS Location & Address</th>
-                    <th className="px-4 py-3">Source</th>
-                    <th className="px-4 py-3 text-right">Details</th>
+                    <th className="px-4 py-3.5">Employee & Identity</th>
+                    <th className="px-4 py-3.5">Punch Date</th>
+                    <th className="px-4 py-3.5">Punch In</th>
+                    <th className="px-4 py-3.5">Punch Out / Actor</th>
+                    <th className="px-4 py-3.5">Shift Duration</th>
+                    <th className="px-4 py-3.5">Status</th>
+                    <th className="px-4 py-3.5">GPS Location</th>
+                    <th className="px-4 py-3.5">Source</th>
+                    <th className="px-4 py-3.5 text-right">Details</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-neutral-100">
@@ -690,65 +689,70 @@ export function AttendancePage() {
                     <tr
                       key={record._id}
                       onClick={() => handleOpenEmployeeDetails(record)}
-                      className="hover:bg-blue-50/50 transition-colors cursor-pointer group"
+                      className="hover:bg-blue-50/40 transition-colors cursor-pointer group"
                     >
-                      {/* Selfie Column */}
-                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                        {record.selfieUrl ? (
+                      {/* Unified Employee & Photo Column */}
+                      <td className="px-4 py-3.5">
+                        <div className="flex items-center gap-3">
                           <div
-                            onClick={() =>
-                              setPreviewSelfie({
-                                url: record.selfieUrl!,
-                                name: record.userName,
-                                time: formatDateTime(record.loginTime, record.date),
-                                location: record.location?.address,
-                              })
-                            }
-                            className="group/selfie relative h-12 w-12 cursor-pointer overflow-hidden rounded-lg border-2 border-emerald-500 shadow-sm transition-transform hover:scale-105"
-                            title="Click to enlarge selfie"
+                            className="relative shrink-0"
+                            onClick={(e) => {
+                              if (record.selfieUrl) {
+                                e.stopPropagation();
+                                setPreviewSelfie({
+                                  url: record.selfieUrl!,
+                                  name: record.userName,
+                                  time: formatDateTime(record.loginTime, record.date),
+                                  location: record.location?.address,
+                                });
+                              }
+                            }}
                           >
-                            <img
-                              src={record.selfieUrl}
-                              alt={record.userName}
-                              className="h-full w-full object-cover"
-                              loading="lazy"
-                            />
-                            <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 group-hover/selfie:opacity-100 transition-opacity">
-                              <Camera className="h-4 w-4 text-white" />
-                            </div>
+                            {record.selfieUrl ? (
+                              <div
+                                className="group/selfie relative h-11 w-11 cursor-pointer overflow-hidden rounded-xl border-2 border-emerald-500 shadow-sm transition-transform hover:scale-105"
+                                title="Click to view full punch selfie"
+                              >
+                                <img
+                                  src={record.selfieUrl}
+                                  alt={record.userName}
+                                  className="h-full w-full object-cover"
+                                  loading="lazy"
+                                />
+                                <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover/selfie:opacity-100 transition-opacity">
+                                  <Camera className="h-4 w-4 text-white" />
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="h-11 w-11 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-500 font-bold text-sm">
+                                {record.userName ? record.userName.charAt(0).toUpperCase() : 'U'}
+                              </div>
+                            )}
                           </div>
-                        ) : (
-                          <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-neutral-100 text-neutral-400 border border-neutral-200">
-                            <Camera className="h-5 w-5" />
-                          </div>
-                        )}
-                      </td>
 
-                      {/* Employee Column */}
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2.5">
-                          <Avatar name={record.userName} size="sm" />
-                          <div>
-                            <div className="font-semibold text-neutral-900 group-hover:text-blue-600 transition-colors flex items-center gap-1.5">
-                              <span>{record.userName}</span>
+                          <div className="min-w-0">
+                            <div className="font-bold text-neutral-900 group-hover:text-blue-600 transition-colors flex items-center gap-1.5 truncate">
+                              <span className="truncate text-sm">{record.userName}</span>
                               <span className="text-[10px] text-blue-600 font-semibold opacity-0 group-hover:opacity-100 transition-opacity">
-                                • View History →
+                                ↗
                               </span>
                             </div>
-                            <div className="flex items-center gap-1.5 text-xs text-neutral-500">
-                              <span className="font-mono font-medium text-blue-700 bg-blue-50 px-1 rounded">
+                            <div className="flex items-center gap-1.5 text-xs text-neutral-500 mt-0.5">
+                              <span className="font-mono font-bold text-emerald-800 bg-emerald-50 border border-emerald-200/80 px-1.5 py-0.5 rounded text-[11px]">
                                 {record.employeeId || 'EMP'}
                               </span>
-                              <span>·</span>
-                              <span>{record.department || 'Sales'}</span>
+                              <span className="text-neutral-300">·</span>
+                              <span className="truncate text-[11px] text-neutral-600 font-medium">
+                                {record.department || 'Sales & BD'}
+                              </span>
                             </div>
                           </div>
                         </div>
                       </td>
 
                       {/* Punch Date */}
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <div className="font-semibold text-neutral-800">
+                      <td className="px-4 py-3.5 whitespace-nowrap">
+                        <div className="font-bold text-neutral-900 text-xs">
                           {new Date(`${record.date}T12:00:00Z`).toLocaleDateString('en-IN', {
                             day: 'numeric',
                             month: 'short',
@@ -756,33 +760,36 @@ export function AttendancePage() {
                             timeZone: 'Asia/Kolkata',
                           })}
                         </div>
-                        <div className="text-[11px] font-mono text-neutral-400">{record.date}</div>
+                        <div className="text-[10px] font-mono text-neutral-400 mt-0.5">{record.date}</div>
                       </td>
 
                       {/* Login Timing */}
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <div className="inline-flex items-center gap-1.5 font-mono font-bold text-xs text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200 shadow-2xs">
+                      <td className="px-4 py-3.5 whitespace-nowrap">
+                        <div className="inline-flex items-center gap-1.5 font-mono font-bold text-xs text-emerald-900 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200/80 shadow-2xs">
                           <LogIn className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
                           <span>{formatExactTime(record.loginTime, record.date)}</span>
                         </div>
                       </td>
 
                       {/* Logout Timing */}
-                      <td className="px-4 py-3 whitespace-nowrap">
+                      <td className="px-4 py-3.5 whitespace-nowrap">
                         {record.logoutTime && String(record.logoutTime).toLowerCase() !== 'invalid date' ? (
                           <div className="flex flex-col gap-1 items-start">
-                            <div className="inline-flex items-center gap-1.5 font-mono font-bold text-xs text-amber-800 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200 shadow-2xs">
+                            <div className="inline-flex items-center gap-1.5 font-mono font-bold text-xs text-amber-900 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200/80 shadow-2xs">
                               <LogOut className="h-3.5 w-3.5 text-amber-600 shrink-0" />
                               <span>{formatExactTime(record.logoutTime, record.date)}</span>
                             </div>
                             {record.logoutBy === 'ADMIN' ? (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-200 font-mono" title={`Remotely punched out by ${record.logoutAdminName || 'Admin'}`}>
-                                <Shield className="w-3 h-3 text-rose-600" />
+                              <span
+                                className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-200 font-mono shadow-2xs"
+                                title={`Remotely punched out by ${record.logoutAdminName || 'Admin'}`}
+                              >
+                                <Shield className="w-3 h-3 text-rose-600 shrink-0" />
                                 <span>Admin {record.logoutAdminName ? `(${record.logoutAdminName})` : ''}</span>
                               </span>
                             ) : (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200 font-mono">
-                                <User className="w-3 h-3 text-blue-600" />
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200 font-mono shadow-2xs">
+                                <User className="w-3 h-3 text-blue-600 shrink-0" />
                                 <span>Employee</span>
                               </span>
                             )}
@@ -794,18 +801,19 @@ export function AttendancePage() {
                               <span>Active</span>
                             </span>
                             <button
+                              type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleForceLogout(record);
                               }}
                               disabled={loggingOutUserId === record.userId}
-                              className="px-2 py-1 text-[10px] font-bold rounded-md bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                              className="px-2.5 py-1 text-xs font-bold rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 transition shadow-2xs flex items-center gap-1 cursor-pointer disabled:opacity-50"
                               title="Remotely logout employee & record attendance punch-out as Admin"
                             >
                               {loggingOutUserId === record.userId ? (
-                                <RefreshCw className="w-3 h-3 animate-spin text-rose-600" />
+                                <RefreshCw className="w-3.5 h-3.5 animate-spin text-rose-600" />
                               ) : (
-                                <LogOut className="w-3 h-3 text-rose-600" />
+                                <LogOut className="w-3.5 h-3.5 text-rose-600" />
                               )}
                               <span>Logout</span>
                             </button>
@@ -814,36 +822,36 @@ export function AttendancePage() {
                       </td>
 
                       {/* Duration */}
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <span className="font-mono text-xs font-semibold text-neutral-700 bg-neutral-100 px-2 py-1 rounded border border-neutral-200">
+                      <td className="px-4 py-3.5 whitespace-nowrap">
+                        <span className="font-mono text-xs font-semibold text-neutral-800 bg-neutral-100 px-2.5 py-1 rounded-md border border-neutral-200 shadow-2xs">
                           {formatDuration(record.loginTime, record.logoutTime, record.date)}
                         </span>
                       </td>
 
                       {/* Status */}
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3.5">
                         <span
                           className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ${
                             record.status === 'LATE'
-                              ? 'bg-amber-100 text-amber-800'
-                              : 'bg-emerald-100 text-emerald-800'
+                              ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                              : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
                           }`}
                         >
                           <span
                             className={`h-1.5 w-1.5 rounded-full ${
                               record.status === 'LATE' ? 'bg-amber-600' : 'bg-emerald-600'
                             }`}
-                          ></span>
+                          />
                           {record.status}
                         </span>
                       </td>
 
                       {/* Location & GPS */}
-                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                        <div className="max-w-xs">
-                          <div className="flex items-start gap-1 text-xs text-neutral-700">
-                            <MapPin className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-rose-500" />
-                            <span className="line-clamp-2 leading-relaxed">
+                      <td className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
+                        <div className="max-w-[200px]">
+                          <div className="flex items-start gap-1.5 text-xs text-neutral-800">
+                            <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-rose-500" />
+                            <span className="truncate leading-tight font-medium" title={record.location?.address}>
                               {record.location?.address || 'Location Not Recorded'}
                             </span>
                           </div>
@@ -852,9 +860,9 @@ export function AttendancePage() {
                               href={record.location.googleMapsUrl}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="mt-1 inline-flex items-center gap-1 text-[11px] font-medium text-blue-600 hover:text-blue-800 hover:underline"
+                              className="mt-1 inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-800 hover:underline ml-5"
                             >
-                              <span>View on Google Maps</span>
+                              <span>Google Maps</span>
                               <ExternalLink className="h-3 w-3" />
                             </a>
                           )}
@@ -862,12 +870,12 @@ export function AttendancePage() {
                       </td>
 
                       {/* Source */}
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3.5">
                         <span
-                          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                          className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
                             record.source === 'EXTERNAL_ATTENDANCE_APP'
-                              ? 'bg-purple-100 text-purple-800'
-                              : 'bg-neutral-100 text-neutral-700'
+                              ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                              : 'bg-neutral-100 text-neutral-700 border border-neutral-200'
                           }`}
                         >
                           {record.source === 'EXTERNAL_ATTENDANCE_APP' ? 'Attendance App' : 'System Login'}
@@ -875,14 +883,14 @@ export function AttendancePage() {
                       </td>
 
                       {/* Action */}
-                      <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
+                      <td className="px-4 py-3.5 text-right" onClick={(e) => e.stopPropagation()}>
                         <Button
                           size="xs"
                           variant="secondary"
                           onClick={() => handleOpenEmployeeDetails(record)}
-                          className="bg-white hover:bg-blue-50 text-blue-700 border-neutral-200 hover:border-blue-300 font-semibold shadow-none"
+                          className="bg-white hover:bg-blue-50 text-blue-700 border-neutral-200 hover:border-blue-300 font-semibold shadow-2xs"
                         >
-                          View Logins
+                          View Logs
                         </Button>
                       </td>
                     </tr>
@@ -904,7 +912,7 @@ export function AttendancePage() {
           <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-sm">
             <div className="overflow-x-auto">
               <table className="w-full min-w-[850px] text-left text-sm">
-                <thead className="border-b border-neutral-200 bg-neutral-50 text-xs font-semibold uppercase text-neutral-500">
+                <thead className="sticky top-0 z-10 border-b border-neutral-200 bg-neutral-50/95 text-[11px] font-bold uppercase tracking-wider text-neutral-500 shadow-2xs">
                   <tr>
                     <th className="px-4 py-3">Employee</th>
                     <th className="px-4 py-3">Department</th>
@@ -1336,10 +1344,10 @@ export function AttendancePage() {
         })()}
       </SlideOverPanel>
 
-      {/* Selfie Image Lightbox Preview Modal */}
+      {/* Selfie Image Lightbox Preview Modal (No background blur) */}
       {previewSelfie && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm animate-in fade-in duration-200"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 animate-in fade-in duration-200"
           onClick={() => setPreviewSelfie(null)}
         >
           <div

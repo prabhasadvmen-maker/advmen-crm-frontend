@@ -607,7 +607,7 @@ export function SuperAdminDashboard() {
       {/* Modal: Create Active Tenant Workspace */}
       {isNewTenantOpen && (
         <div
-          className="fixed inset-0 z-50 overflow-y-auto bg-black/50 backdrop-blur-sm p-4 flex items-center justify-center animate-in fade-in"
+          className="fixed inset-0 z-50 overflow-y-auto bg-black/50 p-4 flex items-center justify-center animate-in fade-in"
           onClick={(e) => {
             if (e.target === e.currentTarget && !isSubmittingTenant) setIsNewTenantOpen(false);
           }}
@@ -698,7 +698,7 @@ export function SuperAdminDashboard() {
       {/* Modal: Provision User Across Workspaces */}
       {isNewUserOpen && (
         <div
-          className="fixed inset-0 z-50 overflow-y-auto bg-black/50 backdrop-blur-sm p-4 flex items-center justify-center animate-in fade-in"
+          className="fixed inset-0 z-50 overflow-y-auto bg-black/50 p-4 flex items-center justify-center animate-in fade-in"
           onClick={(e) => {
             if (e.target === e.currentTarget && !isSubmittingUser) setIsNewUserOpen(false);
           }}
@@ -821,7 +821,7 @@ export function SuperAdminDashboard() {
       {/* Modal: Delete User Confirmation */}
       {userToDelete && (
         <div
-          className="fixed inset-0 z-50 overflow-y-auto bg-black/50 backdrop-blur-sm p-4 flex items-center justify-center animate-in fade-in"
+          className="fixed inset-0 z-50 overflow-y-auto bg-black/50 p-4 flex items-center justify-center animate-in fade-in"
           onClick={(e) => {
             if (e.target === e.currentTarget && !isDeletingUser) setUserToDelete(null);
           }}
@@ -867,7 +867,7 @@ export function SuperAdminDashboard() {
       {/* Modal: Delete Tenant Organization Confirmation */}
       {orgToDelete && (
         <div
-          className="fixed inset-0 z-50 overflow-y-auto bg-black/50 backdrop-blur-sm p-4 flex items-center justify-center animate-in fade-in"
+          className="fixed inset-0 z-50 overflow-y-auto bg-black/50 p-4 flex items-center justify-center animate-in fade-in"
           onClick={(e) => {
             if (e.target === e.currentTarget && !isDeletingOrg) setOrgToDelete(null);
           }}

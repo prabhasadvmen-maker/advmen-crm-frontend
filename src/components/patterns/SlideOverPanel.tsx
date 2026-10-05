@@ -49,10 +49,10 @@ export function SlideOverPanel({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
-      {/* Backdrop */}
+      {/* Backdrop without blur as requested */}
       <div
         onClick={onClose}
-        className="fixed inset-0 bg-neutral-900/50 backdrop-blur-sm transition-opacity duration-200 animate-in fade-in"
+        className="fixed inset-0 bg-neutral-900/50 transition-opacity duration-200 animate-in fade-in"
       />
 
       {/* Modal Card */}

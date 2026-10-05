@@ -383,7 +383,7 @@ export function AdminPage() {
       {/* Remove Team Member Confirmation Modal */}
       {memberToDelete && (
         <div
-          className="fixed inset-0 z-50 overflow-y-auto bg-black/50 backdrop-blur-sm p-4 flex items-center justify-center animate-in fade-in"
+          className="fixed inset-0 z-50 overflow-y-auto bg-black/50 p-4 flex items-center justify-center animate-in fade-in"
           onClick={(e) => {
             if (e.target === e.currentTarget && !isDeleting) setMemberToDelete(null);
           }}
@@ -430,7 +430,7 @@ export function AdminPage() {
       {/* Interactive Provision / Invite Team Member Modal */}
       {isInviteOpen && (
         <div
-          className="fixed inset-0 z-50 overflow-y-auto overscroll-contain bg-black/50 backdrop-blur-sm p-4 flex items-center justify-center animate-in fade-in"
+          className="fixed inset-0 z-50 overflow-y-auto overscroll-contain bg-black/50 p-4 flex items-center justify-center animate-in fade-in"
           onClick={(e) => {
             if (e.target === e.currentTarget) setIsInviteOpen(false);
           }}

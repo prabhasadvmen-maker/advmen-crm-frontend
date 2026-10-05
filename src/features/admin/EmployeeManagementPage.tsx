@@ -103,9 +103,11 @@ export function EmployeeManagementPage() {
     });
   };
 
-  // Load Data
-  const loadData = useCallback(async () => {
-    setIsLoading(true);
+  // Load Data with optional full-page loader (silent background refresh prevents screen flickering)
+  const loadData = useCallback(async (showFullLoader = true) => {
+    if (showFullLoader) {
+      setIsLoading(true);
+    }
     try {
       const [usersData, summary] = await Promise.all([
         usersApi.getUsers(organizationId ? { organizationId } : undefined),
@@ -129,18 +131,22 @@ export function EmployeeManagementPage() {
       setUnassignedSummary(summary);
     } catch (err: any) {
       console.error('Failed to load employee directory:', err);
-      addToast({
-        type: 'danger',
-        title: 'Error Loading Staff',
-        message: err?.message || 'Could not fetch employees from database.',
-      });
+      if (showFullLoader) {
+        addToast({
+          type: 'danger',
+          title: 'Error Loading Staff',
+          message: err?.message || 'Could not fetch employees from database.',
+        });
+      }
     } finally {
-      setIsLoading(false);
+      if (showFullLoader) {
+        setIsLoading(false);
+      }
     }
   }, [addToast, organizationId]);
 
   useEffect(() => {
-    loadData();
+    loadData(true);
   }, [loadData]);
 
   // Load Leads for a specific employee
@@ -334,22 +340,28 @@ export function EmployeeManagementPage() {
     }
   };
 
-  // Delete User
+  // Delete User (Optimistic instant removal with zero page reload/flicker)
   const handleDeleteUser = async () => {
     if (!userToDelete) return;
+    const target = userToDelete;
+    // 1. Immediately close modal and remove from state for instant responsiveness
+    setUserToDelete(null);
+    setEmployees((prev) => prev.filter((u) => u.id !== target.id));
     setIsDeletingUser(true);
+
     try {
-      await usersApi.deleteUser(userToDelete.id);
-      setEmployees((prev) => prev.filter((u) => u.id !== userToDelete.id));
+      await usersApi.deleteUser(target.id);
       addToast({
         type: 'success',
         title: 'Employee Removed',
-        message: `${userToDelete.name} has been revoked from workspace.`,
+        message: `${target.name} has been revoked from workspace.`,
       });
-      setUserToDelete(null);
-      loadData();
+      // 2. Silent background sync without showing full page loader
+      void loadData(false);
     } catch (err: any) {
       console.error('Failed to remove user:', err);
+      // Rollback by syncing data back silently
+      void loadData(false);
       addToast({
         type: 'danger',
         title: 'Deletion Failed',
@@ -447,7 +459,7 @@ export function EmployeeManagementPage() {
         <div className="absolute right-0 top-0 bottom-0 w-96 bg-white/5 transform skew-x-12 pointer-events-none" />
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md text-xs font-semibold text-blue-200 border border-white/15">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/15 text-xs font-semibold text-blue-100 border border-white/20">
               <UserCheck className="w-3.5 h-3.5 text-blue-300" />
               <span>Dedicated Staff Governance & Lead Distribution</span>
             </div>
@@ -601,9 +613,9 @@ export function EmployeeManagementPage() {
         </div>
 
         {/* Employee Table */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-neutral-700">
-            <thead className="bg-neutral-50 text-[11px] font-bold text-neutral-500 uppercase tracking-wider border-b border-neutral-200">
+        <div className="overflow-x-auto max-h-[750px] relative">
+          <table className="w-full min-w-[1150px] text-left text-xs text-neutral-700">
+            <thead className="sticky top-0 z-10 bg-neutral-50/95 text-[11px] font-bold text-neutral-500 uppercase tracking-wider border-b border-neutral-200 shadow-2xs">
               <tr>
                 <th className="py-3.5 px-4">Employee Details</th>
                 <th className="py-3.5 px-4">Employee ID (Login ID)</th>
@@ -719,62 +731,69 @@ export function EmployeeManagementPage() {
                       </td>
 
                       {/* Action Buttons */}
-                      <td className="py-3.5 px-4 text-right">
-                        <div className="flex items-center justify-end gap-2">
+                      <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                        <div className="flex items-center justify-end gap-1.5">
                           {!isCurrent && emp.isActive && (
-                            <Button
-                              size="sm"
-                              variant="secondary"
+                            <button
+                              type="button"
                               onClick={() => handleImpersonateLogin(emp)}
                               disabled={impersonatingUserId === emp.id}
-                              className="text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border-indigo-200"
-                              icon={impersonatingUserId === emp.id ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <LogIn className="w-3.5 h-3.5 text-indigo-600" />}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200/80 rounded-lg transition shadow-2xs cursor-pointer disabled:opacity-50"
                               title={`Directly login into ${emp.name}'s employee workspace`}
                             >
-                              Login as User
-                            </Button>
+                              {impersonatingUserId === emp.id ? (
+                                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <LogIn className="w-3.5 h-3.5 text-indigo-600" />
+                              )}
+                              <span>Login as User</span>
+                            </button>
                           )}
 
                           {!isCurrent && (
-                            <Button
-                              size="sm"
-                              variant="secondary"
+                            <button
+                              type="button"
                               onClick={() => handleForceLogout(emp)}
                               disabled={loggingOutUserId === emp.id}
-                              className="text-xs font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 border-amber-200"
-                              icon={loggingOutUserId === emp.id ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <LogOut className="w-3.5 h-3.5 text-amber-600" />}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200/80 rounded-lg transition shadow-2xs cursor-pointer disabled:opacity-50"
                               title={`Remotely logout ${emp.name} and record punch-out in Attendance`}
                             >
-                              Logout
-                            </Button>
+                              {loggingOutUserId === emp.id ? (
+                                <RefreshCw className="w-3.5 h-3.5 animate-spin text-rose-600" />
+                              ) : (
+                                <LogOut className="w-3.5 h-3.5 text-rose-600" />
+                              )}
+                              <span>Logout</span>
+                            </button>
                           )}
 
                           <Link
                             to={`/attendance?search=${encodeURIComponent(emp.employeeId || emp.name)}`}
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition-colors"
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200/80 transition-colors shadow-2xs"
                             title="View complete login/logout times and attendance"
                           >
                             <Clock className="w-3.5 h-3.5 text-emerald-600" />
-                            <span>Logins & Attendance</span>
+                            <span>Attendance</span>
                           </Link>
 
-                          <Button
-                            size="sm"
-                            variant="secondary"
+                          <button
+                            type="button"
                             onClick={() => {
                               setTargetEmployeeForAssign(emp);
                               setAssignQuantityInput(Math.min(10, unassignedSummary.total || 10));
                             }}
-                            className="text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border-blue-200"
-                            icon={<Share2 className="w-3.5 h-3.5" />}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200/80 transition-colors shadow-2xs cursor-pointer"
+                            title={`Assign leads to ${emp.name}`}
                           >
-                            Assign Leads
-                          </Button>
+                            <Share2 className="w-3.5 h-3.5 text-blue-600" />
+                            <span>Assign Leads</span>
+                          </button>
 
                           {!isCurrent && emp.role !== 'SUPER_ADMIN' && (
                             <button
+                              type="button"
                               onClick={() => setUserToDelete(emp)}
-                              className="p-2 rounded-lg text-neutral-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                              className="p-1.5 rounded-lg text-neutral-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer ml-1"
                               title={`Revoke ${emp.name}`}
                             >
                               <Trash2 className="w-4 h-4" />
@@ -1269,10 +1288,10 @@ export function EmployeeManagementPage() {
         </div>
       </SlideOverPanel>
 
-      {/* MODAL 5: DELETE EMPLOYEE CONFIRMATION */}
+      {/* MODAL 5: DELETE EMPLOYEE CONFIRMATION (No background blur as requested) */}
       {userToDelete && (
         <div
-          className="fixed inset-0 z-50 overflow-y-auto bg-black/50 backdrop-blur-sm p-4 flex items-center justify-center animate-in fade-in"
+          className="fixed inset-0 z-50 overflow-y-auto bg-black/50 p-4 flex items-center justify-center animate-in fade-in"
           onClick={(e) => {
             if (e.target === e.currentTarget && !isDeletingUser) setUserToDelete(null);
           }}

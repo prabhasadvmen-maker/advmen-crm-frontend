@@ -47,7 +47,7 @@ export function CommandBar() {
       {/* Backdrop */}
       <div
         onClick={() => setCommandBarOpen(false)}
-        className="fixed inset-0 bg-neutral-900/50 backdrop-blur-sm animate-in fade-in"
+        className="fixed inset-0 bg-neutral-900/50 animate-in fade-in"
       />
 
       {/* Modal */}
