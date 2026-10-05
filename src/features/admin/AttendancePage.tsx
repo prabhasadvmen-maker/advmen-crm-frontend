@@ -26,7 +26,6 @@ import {
   Trash2,
 } from 'lucide-react';
 import { useUIStore } from '@/stores/uiStore';
-import { getSocketClient } from '@/lib/socketClient';
 
 
 interface EmployeeMonthSummary {

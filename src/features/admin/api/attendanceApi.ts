@@ -7,6 +7,8 @@ export interface AttendanceLoginEvent {
   logoutAdminName?: string;
   ipAddress?: string;
   userAgent?: string;
+  awayDurationFormatted?: string;
+  reLoginTime?: string;
 }
 
 export interface AttendanceRecord {
@@ -25,6 +27,12 @@ export interface AttendanceRecord {
   logoutTime?: string;
   logoutBy?: 'ADMIN' | 'EMPLOYEE' | 'SYSTEM';
   logoutAdminName?: string;
+  adminLogoutBy?: string;
+  adminLogoutAt?: string;
+  adminLogoutReLoginAt?: string;
+  isAwayPending?: boolean;
+  totalAwayDurationSeconds?: number;
+  awayDurationFormatted?: string;
   status: 'PRESENT' | 'LATE' | 'HALF_DAY' | 'ON_LEAVE';
   selfieUrl?: string;
   location?: {
