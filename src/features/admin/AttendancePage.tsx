@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router-dom';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { KPICard } from '@/components/patterns/KPICard';
@@ -23,8 +23,10 @@ import {
   Clock,
   Shield,
   User,
+  Trash2,
 } from 'lucide-react';
 import { useUIStore } from '@/stores/uiStore';
+
 
 interface EmployeeMonthSummary {
   userId: string;
@@ -250,6 +252,9 @@ export function AttendancePage() {
   const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [loggingOutUserId, setLoggingOutUserId] = useState<string | null>(null);
+  const [isClearModalOpen, setIsClearModalOpen] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
+  const [deletingRecordId, setDeletingRecordId] = useState<string | null>(null);
   const { addToast } = useUIStore();
 
   const loadAttendance = useCallback(async () => {
@@ -292,8 +297,9 @@ export function AttendancePage() {
     }
   };
 
-  const handleForceLogout = async (record: AttendanceRecord) => {
-    if (!window.confirm(`Are you sure you want to remotely logout ${record.userName}?\nTheir dashboard session will be closed immediately and punch-out will be recorded in Attendance as 'ADMIN'.`)) {
+  const handleForceLogout = async (record: AttendanceRecord | { userId: string; name: string }) => {
+    const empName = 'userName' in record ? record.userName : record.name;
+    if (!window.confirm(`Are you sure you want to remotely logout ${empName}?\nTheir dashboard session will be closed immediately and punch-out will be recorded in Attendance as 'ADMIN'.`)) {
       return;
     }
     try {
@@ -301,7 +307,7 @@ export function AttendancePage() {
       const res = await attendanceApi.forceLogout(record.userId);
       addToast({
         type: 'success',
-        title: `${record.userName} Logged Out`,
+        title: `${empName} Logged Out`,
         message: res.message || 'Employee session terminated and attendance updated by Admin.',
       });
       await loadAttendance();
@@ -315,6 +321,53 @@ export function AttendancePage() {
       setLoggingOutUserId(null);
     }
   };
+
+  const handleClearAllAttendance = async () => {
+    try {
+      setIsClearing(true);
+      const res = await attendanceApi.clearAll();
+      setRecords([]);
+      setSelectedEmployee(null);
+      setIsClearModalOpen(false);
+      addToast({
+        type: 'success',
+        title: 'Attendance Records Cleared',
+        message: res.message || 'All attendance records successfully wiped.',
+      });
+      await loadAttendance();
+    } catch (err: any) {
+      addToast({
+        type: 'danger',
+        title: 'Clear Failed',
+        message: err?.message || 'Could not clear attendance records.',
+      });
+    } finally {
+      setIsClearing(false);
+    }
+  };
+
+  const handleDeleteSingleRecord = async (recordId: string, empName: string) => {
+    if (!window.confirm(`Delete attendance record for ${empName}?`)) return;
+    try {
+      setDeletingRecordId(recordId);
+      await attendanceApi.deleteRecord(recordId);
+      setRecords((prev) => prev.filter((r) => r._id !== recordId));
+      addToast({
+        type: 'success',
+        title: 'Record Removed',
+        message: `Attendance record for ${empName} has been deleted.`,
+      });
+    } catch (err: any) {
+      addToast({
+        type: 'danger',
+        title: 'Delete Failed',
+        message: err?.message || 'Could not delete attendance record.',
+      });
+    } finally {
+      setDeletingRecordId(null);
+    }
+  };
+
 
   const employees = useMemo(() => {
     const byUser = new Map<string, EmployeeMonthSummary>();
@@ -510,6 +563,17 @@ export function AttendancePage() {
           <Button
             variant="secondary"
             size="sm"
+            onClick={() => setIsClearModalOpen(true)}
+            icon={<Trash2 className="h-4 w-4 text-rose-600" />}
+            className="border-rose-200 text-rose-700 bg-rose-50 hover:bg-rose-100 font-semibold shadow-2xs"
+            title="Delete all attendance records"
+          >
+            Clear Records
+          </Button>
+
+          <Button
+            variant="secondary"
+            size="sm"
             icon={<RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />}
             onClick={() => void loadAttendance()}
           >
@@ -517,6 +581,7 @@ export function AttendancePage() {
           </Button>
         </div>
       </div>
+
 
       {/* Sync Status Banner */}
       {syncFeedback && (
@@ -652,20 +717,35 @@ export function AttendancePage() {
       ) : activeTab === 'punches' ? (
         /* LIVE PUNCHES VIEW WITH SELFIES */
         filteredPunchRecords.length === 0 ? (
-          <div className="rounded-xl border border-neutral-200 bg-white p-12 text-center">
-            <Clock3 className="mx-auto h-8 w-8 text-neutral-300" />
-            <p className="mt-2 text-sm font-semibold text-neutral-700">No punch records found</p>
-            <p className="mt-1 text-xs text-neutral-500">
-              When employees mark attendance on the Attendance CRM app, their selfies and GPS data appear here.
+          <div className="rounded-2xl border border-neutral-200/90 bg-white p-12 text-center shadow-xs">
+            <div className="mx-auto w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mb-3 border border-blue-100 shadow-2xs">
+              <Clock3 className="h-7 w-7" />
+            </div>
+            <h3 className="text-base font-bold text-neutral-900">Attendance Database Ready</h3>
+            <p className="mt-1 text-xs text-neutral-500 max-w-md mx-auto leading-relaxed">
+              All previous attendance records have been cleared. As employees check in with their selfie and GPS via the Attendance Web App or portal, live records will stream here in real time.
             </p>
-            <Button
-              variant="secondary"
-              size="sm"
-              className="mt-4"
-              onClick={() => void handleSyncNow()}
-            >
-              Sync from Attendance CRM
-            </Button>
+            <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
+              <Button
+                variant="primary"
+                size="sm"
+                className="bg-blue-600 hover:bg-blue-700 text-white font-semibold"
+                icon={<RefreshCw className={`h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`} />}
+                onClick={() => void handleSyncNow()}
+                disabled={isSyncing}
+              >
+                {isSyncing ? 'Syncing...' : 'Live Sync Attendance App'}
+              </Button>
+              <a
+                href="https://atendence-crm.vercel.app"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-neutral-700 bg-neutral-100 hover:bg-neutral-200 border border-neutral-200 transition"
+              >
+                <span>Open Attendance App</span>
+                <ExternalLink className="h-3.5 w-3.5 text-neutral-500" />
+              </a>
+            </div>
           </div>
         ) : (
           <div className="overflow-hidden rounded-2xl border border-neutral-200/90 bg-white shadow-sm">
@@ -883,15 +963,30 @@ export function AttendancePage() {
                       </td>
 
                       {/* Action */}
-                      <td className="px-4 py-3.5 text-right" onClick={(e) => e.stopPropagation()}>
-                        <Button
-                          size="xs"
-                          variant="secondary"
-                          onClick={() => handleOpenEmployeeDetails(record)}
-                          className="bg-white hover:bg-blue-50 text-blue-700 border-neutral-200 hover:border-blue-300 font-semibold shadow-2xs"
-                        >
-                          View Logs
-                        </Button>
+                      <td className="px-4 py-3.5 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-1.5">
+                          <Button
+                            size="xs"
+                            variant="secondary"
+                            onClick={() => handleOpenEmployeeDetails(record)}
+                            className="bg-white hover:bg-blue-50 text-blue-700 border-neutral-200 hover:border-blue-300 font-semibold shadow-2xs"
+                          >
+                            Details
+                          </Button>
+                          <button
+                            type="button"
+                            onClick={() => void handleDeleteSingleRecord(record._id, record.userName)}
+                            disabled={deletingRecordId === record._id}
+                            className="p-1.5 rounded-lg text-neutral-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                            title="Delete this attendance record"
+                          >
+                            {deletingRecordId === record._id ? (
+                              <RefreshCw className="w-3.5 h-3.5 animate-spin text-rose-600" />
+                            ) : (
+                              <Trash2 className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -1113,8 +1208,39 @@ export function AttendancePage() {
                 </div>
               </div>
 
+              {/* Quick Actions Bar */}
+              <div className="p-3.5 rounded-xl border border-neutral-200 bg-neutral-50/80 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  {activeSessions > 0 && (
+                    <Button
+                      size="xs"
+                      variant="primary"
+                      onClick={() => void handleForceLogout(selectedEmployee)}
+                      disabled={loggingOutUserId === selectedEmployee.userId}
+                      icon={loggingOutUserId === selectedEmployee.userId ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <LogOut className="w-3.5 h-3.5" />}
+                      className="bg-rose-600 hover:bg-rose-700 text-white font-bold cursor-pointer"
+                    >
+                      Remote Logout & Punch-Out
+                    </Button>
+                  )}
+                  <Link
+                    to={`/leads?search=${encodeURIComponent(selectedEmployee.name)}`}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 transition shadow-2xs"
+                  >
+                    <span>View Assigned Leads</span>
+                  </Link>
+                  <Link
+                    to={`/employees?search=${encodeURIComponent(selectedEmployee.name)}`}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-neutral-700 bg-white hover:bg-neutral-100 border border-neutral-200 transition shadow-2xs"
+                  >
+                    <span>Staff Profile & Actions</span>
+                  </Link>
+                </div>
+              </div>
+
               {/* Day-by-Day Records List */}
               <div className="space-y-4 pt-1">
+
                 <div className="flex items-center justify-between border-b border-neutral-200 pb-2">
                   <h4 className="text-xs font-bold uppercase tracking-wider text-neutral-600">
                     Day-Wise Login & Logout Timeline
@@ -1384,6 +1510,56 @@ export function AttendancePage() {
           </div>
         </div>
       )}
+
+      {/* Clear All Attendance Confirmation Modal (No blur) */}
+      {isClearModalOpen && (
+        <div
+          className="fixed inset-0 z-50 overflow-y-auto bg-black/50 p-4 flex items-center justify-center animate-in fade-in"
+          onClick={() => !isClearing && setIsClearModalOpen(false)}
+        >
+          <div
+            className="bg-white rounded-2xl border border-neutral-200 shadow-2xl max-w-md w-full p-6 space-y-4 my-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-neutral-900">Delete All Attendance Records</h3>
+                <p className="text-xs text-neutral-500">Wipe entire attendance history from database.</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-neutral-600 bg-neutral-50 p-3 rounded-lg border border-neutral-200 leading-relaxed">
+              Are you sure you want to permanently clear all attendance entries? 
+              This will remove all punch-in, punch-out, duration, and selfie records. 
+              New attendances will start fresh from today.
+            </p>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setIsClearModalOpen(false)}
+                disabled={isClearing}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                className="bg-rose-600 hover:bg-rose-700 text-white font-bold"
+                onClick={() => void handleClearAllAttendance()}
+                disabled={isClearing}
+              >
+                {isClearing ? 'Clearing...' : 'Confirm Clear All'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+

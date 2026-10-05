@@ -33,7 +33,9 @@ import {
   LogIn,
   LogOut,
   Plus,
+  Eye,
 } from 'lucide-react';
+
 import { Link, useNavigate } from 'react-router-dom';
 
 const AVAILABLE_ROLES: { role: UserRole; label: string; description: string }[] = [
@@ -100,7 +102,11 @@ export function EmployeeManagementPage() {
   const [userToDelete, setUserToDelete] = useState<UserDto | null>(null);
   const [isDeletingUser, setIsDeletingUser] = useState(false);
 
+  // Selected Employee Details & Actions Drawer
+  const [selectedEmployeeForDetails, setSelectedEmployeeForDetails] = useState<UserDto | null>(null);
+
   // Copy feedback state
+
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const navigate = useNavigate();
@@ -839,14 +845,19 @@ export function EmployeeManagementPage() {
                   const isCurrent = (currentUser && emp.id === currentUser.id) || (currentUser && emp.email === currentUser.email);
 
                   return (
-                    <tr key={emp.id} className="hover:bg-neutral-50/80 transition-colors">
+                    <tr
+                      key={emp.id}
+                      onClick={() => setSelectedEmployeeForDetails(emp)}
+                      className="hover:bg-blue-50/50 transition-colors cursor-pointer group"
+                      title="Click anywhere to open employee profile & all action buttons"
+                    >
                       {/* Name & Avatar */}
                       <td className="py-3.5 px-4">
                         <div className="flex items-center gap-3">
                           <Avatar name={emp.name} src={emp.avatarUrl} size="md" />
                           <div>
                             <div className="flex items-center gap-2">
-                              <span className="font-bold text-neutral-900 text-sm">{emp.name}</span>
+                              <span className="font-bold text-neutral-900 text-sm group-hover:text-blue-700 transition-colors">{emp.name}</span>
                               {isCurrent && (
                                 <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-800">
                                   YOU
@@ -866,7 +877,10 @@ export function EmployeeManagementPage() {
                           <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
                           <span>{emp.employeeId || emp.id.slice(-6)}</span>
                           <button
-                            onClick={() => handleCopy(emp.employeeId || emp.id.slice(-6), `employee_${emp.id}`)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleCopy(emp.employeeId || emp.id.slice(-6), `employee_${emp.id}`);
+                            }}
                             className="p-1 hover:text-emerald-950 text-emerald-600 rounded transition-colors ml-0.5"
                             title="Copy employee login ID"
                           >
@@ -906,7 +920,10 @@ export function EmployeeManagementPage() {
                             {emp.assignedLeadsCount || 0} Leads
                           </span>
                           <button
-                            onClick={() => handleOpenViewLeads(emp)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenViewLeads(emp);
+                            }}
                             className="text-[10px] text-indigo-600 hover:text-indigo-800 font-semibold underline mt-1"
                           >
                             View Leads
@@ -923,8 +940,18 @@ export function EmployeeManagementPage() {
                       </td>
 
                       {/* Action Buttons */}
-                      <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                      <td className="py-3.5 px-4 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedEmployeeForDetails(emp)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-neutral-800 bg-neutral-100 hover:bg-neutral-200 border border-neutral-300 rounded-lg transition shadow-2xs cursor-pointer"
+                            title={`View complete profile & details for ${emp.name}`}
+                          >
+                            <Eye className="w-3.5 h-3.5 text-neutral-600" />
+                            <span>Details</span>
+                          </button>
+
                           {!isCurrent && emp.isActive && (
                             <button
                               type="button"
@@ -1658,6 +1685,277 @@ export function EmployeeManagementPage() {
           </div>
         </div>
       )}
+
+      {/* MODAL 6: EMPLOYEE DETAILS & COMPLETE ACTIONS DRAWER */}
+      <SlideOverPanel
+        isOpen={selectedEmployeeForDetails !== null}
+        onClose={() => setSelectedEmployeeForDetails(null)}
+        title={selectedEmployeeForDetails?.name || 'Employee Profile & Actions'}
+        subtitle={
+          selectedEmployeeForDetails
+            ? `${selectedEmployeeForDetails.employeeId || selectedEmployeeForDetails.email} · ${selectedEmployeeForDetails.department || 'Operations'}`
+            : undefined
+        }
+        badge={
+          selectedEmployeeForDetails ? (
+            <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-bold uppercase text-blue-700 font-mono">
+              {selectedEmployeeForDetails.designation || selectedEmployeeForDetails.role?.replace(/_/g, ' ')}
+            </span>
+          ) : undefined
+        }
+      >
+        {selectedEmployeeForDetails && (() => {
+          const emp = selectedEmployeeForDetails;
+          const isCurrent = (currentUser && emp.id === currentUser.id) || (currentUser && emp.email === currentUser.email);
+
+          return (
+            <div className="space-y-6">
+              {/* Employee Summary Card */}
+              <div className="p-5 rounded-2xl bg-gradient-to-br from-blue-900 via-indigo-900 to-neutral-900 text-white shadow-lg relative overflow-hidden">
+                <div className="flex items-center gap-4 relative z-10">
+                  <Avatar name={emp.name} src={emp.avatarUrl} size="lg" className="border-2 border-white/20 shadow-md ring-2 ring-emerald-400" />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-extrabold text-lg text-white truncate">{emp.name}</h3>
+                      {isCurrent && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-500/40 text-blue-100 border border-blue-400/40">
+                          YOU
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-xs text-blue-200 truncate mt-0.5">{emp.email}</div>
+                    {emp.phone && (
+                      <div className="text-xs text-blue-300 font-mono mt-0.5 flex items-center gap-1.5">
+                        <Phone className="w-3 h-3" />
+                        <span>{emp.phone}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="mt-4 pt-3 border-t border-white/10 flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-blue-300 text-[11px]">Employee ID:</span>
+                    <span className="font-mono font-bold bg-white/10 px-2 py-0.5 rounded text-white text-[11px]">
+                      {emp.employeeId || emp.id.slice(-6)}
+                    </span>
+                    <button
+                      onClick={() => handleCopy(emp.employeeId || emp.id.slice(-6), `drawer_${emp.id}`)}
+                      className="p-1 hover:bg-white/20 rounded transition text-blue-200 cursor-pointer"
+                      title="Copy Employee ID"
+                    >
+                      {copiedId === `drawer_${emp.id}` ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className={`w-2 h-2 rounded-full ${emp.isActive ? 'bg-emerald-400 animate-pulse' : 'bg-neutral-400'}`} />
+                    <span className="font-bold text-xs">{emp.isActive ? 'Active Employee' : 'Inactive Account'}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Key Metrics Grid */}
+              <div className="grid grid-cols-2 gap-3">
+                {/* Leads Assigned */}
+                <div className="rounded-xl border border-indigo-200 bg-indigo-50/70 p-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-indigo-900 uppercase tracking-wider">Assigned Leads</span>
+                    <span className="text-xs font-bold text-indigo-600 font-mono">Quota</span>
+                  </div>
+                  <div className="mt-2 text-3xl font-black text-indigo-950 font-mono">
+                    {emp.assignedLeadsCount || 0}
+                  </div>
+                  <div className="mt-2 flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedEmployeeForDetails(null);
+                        handleOpenViewLeads(emp);
+                      }}
+                      className="text-xs font-bold text-indigo-700 hover:text-indigo-900 underline cursor-pointer"
+                    >
+                      View All Leads &rarr;
+                    </button>
+                  </div>
+                </div>
+
+                {/* Department & Role */}
+                <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-blue-900 uppercase tracking-wider">Department</span>
+                    <Briefcase className="w-3.5 h-3.5 text-blue-600" />
+                  </div>
+                  <div className="mt-2 text-sm font-extrabold text-blue-950 truncate">
+                    {emp.department || 'Sales Operations'}
+                  </div>
+                  <div className="mt-1 text-xs text-blue-700 font-medium truncate">
+                    {emp.designation || (emp.role ? emp.role.replace(/_/g, ' ') : 'Employee')}
+                  </div>
+                </div>
+              </div>
+
+              {/* Primary Action Buttons Section */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-bold text-neutral-500 uppercase tracking-wider">
+                  Available Actions & Controls
+                </h4>
+
+                <div className="grid grid-cols-1 gap-2.5">
+                  {/* Action 1: Login as User */}
+                  {!isCurrent && emp.isActive && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedEmployeeForDetails(null);
+                        void handleImpersonateLogin(emp);
+                      }}
+                      disabled={impersonatingUserId === emp.id}
+                      className="w-full flex items-center justify-between p-3.5 rounded-xl border border-indigo-200 bg-indigo-50/60 hover:bg-indigo-100/80 transition-all text-left group cursor-pointer"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-lg bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-2xs">
+                          {impersonatingUserId === emp.id ? (
+                            <RefreshCw className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <LogIn className="w-4 h-4" />
+                          )}
+                        </div>
+                        <div>
+                          <div className="font-bold text-sm text-indigo-950 group-hover:text-indigo-900">
+                            Login as User (Impersonate)
+                          </div>
+                          <div className="text-xs text-indigo-700">
+                            Access {emp.name}'s workspace and view CRM as this employee
+                          </div>
+                        </div>
+                      </div>
+                      <span className="text-xs font-extrabold text-indigo-700 bg-indigo-100 px-2.5 py-1 rounded-lg">
+                        Open &rarr;
+                      </span>
+                    </button>
+                  )}
+
+                  {/* Action 2: Remote Logout (CRM + Attendance App) */}
+                  {!isCurrent && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedEmployeeForDetails(null);
+                        void handleForceLogout(emp);
+                      }}
+                      disabled={loggingOutUserId === emp.id}
+                      className="w-full flex items-center justify-between p-3.5 rounded-xl border border-rose-200 bg-rose-50/60 hover:bg-rose-100/80 transition-all text-left group cursor-pointer"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-lg bg-rose-600 text-white flex items-center justify-center shrink-0 shadow-2xs">
+                          {loggingOutUserId === emp.id ? (
+                            <RefreshCw className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <LogOut className="w-4 h-4" />
+                          )}
+                        </div>
+                        <div>
+                          <div className="font-bold text-sm text-rose-950 group-hover:text-rose-900">
+                            Remote Logout & Punch Out
+                          </div>
+                          <div className="text-xs text-rose-700">
+                            Closes CRM session and logs out employee on Attendance App
+                          </div>
+                        </div>
+                      </div>
+                      <span className="text-xs font-extrabold text-rose-700 bg-rose-100 px-2.5 py-1 rounded-lg">
+                        Logout
+                      </span>
+                    </button>
+                  )}
+
+                  {/* Action 3: View Attendance Log */}
+                  <Link
+                    to={`/attendance?search=${encodeURIComponent(emp.employeeId || emp.name)}`}
+                    onClick={() => setSelectedEmployeeForDetails(null)}
+                    className="w-full flex items-center justify-between p-3.5 rounded-xl border border-emerald-200 bg-emerald-50/60 hover:bg-emerald-100/80 transition-all text-left group"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-lg bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-2xs">
+                        <Clock className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="font-bold text-sm text-emerald-950 group-hover:text-emerald-900">
+                          View Live Attendance Records
+                        </div>
+                        <div className="text-xs text-emerald-700">
+                          Check punch-in times, punch-out, shift durations & selfies
+                        </div>
+                      </div>
+                    </div>
+                    <span className="text-xs font-extrabold text-emerald-700 bg-emerald-100 px-2.5 py-1 rounded-lg">
+                      Attendance &rarr;
+                    </span>
+                  </Link>
+
+                  {/* Action 4: Assign Leads Quota */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedEmployeeForDetails(null);
+                      setTargetEmployeeForAssign(emp);
+                      setAssignQuantityInput(Math.min(10, unassignedSummary.total || 10));
+                    }}
+                    className="w-full flex items-center justify-between p-3.5 rounded-xl border border-blue-200 bg-blue-50/60 hover:bg-blue-100/80 transition-all text-left group cursor-pointer"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-lg bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-2xs">
+                        <Share2 className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="font-bold text-sm text-blue-950 group-hover:text-blue-900">
+                          Assign Leads Quota
+                        </div>
+                        <div className="text-xs text-blue-700">
+                          Transfer unassigned leads from database to this employee ({unassignedSummary.total} available)
+                        </div>
+                      </div>
+                    </div>
+                    <span className="text-xs font-extrabold text-blue-700 bg-blue-100 px-2.5 py-1 rounded-lg">
+                      Assign &rarr;
+                    </span>
+                  </button>
+
+                  {/* Action 5: Revoke Account */}
+                  {!isCurrent && emp.role !== 'SUPER_ADMIN' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedEmployeeForDetails(null);
+                        setUserToDelete(emp);
+                      }}
+                      className="w-full flex items-center justify-between p-3.5 rounded-xl border border-neutral-200 bg-neutral-50/80 hover:bg-rose-50 hover:border-rose-300 transition-all text-left group cursor-pointer"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-lg bg-neutral-200 group-hover:bg-rose-600 text-neutral-600 group-hover:text-white flex items-center justify-center shrink-0 transition-colors">
+                          <Trash2 className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <div className="font-bold text-sm text-neutral-900 group-hover:text-rose-950">
+                            Revoke / Remove Employee
+                          </div>
+                          <div className="text-xs text-neutral-500 group-hover:text-rose-700">
+                            Delete employee login account from this workspace
+                          </div>
+                        </div>
+                      </div>
+                      <span className="text-xs font-bold text-neutral-500 group-hover:text-rose-700">
+                        Revoke
+                      </span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+      </SlideOverPanel>
     </div>
   );
 }
+

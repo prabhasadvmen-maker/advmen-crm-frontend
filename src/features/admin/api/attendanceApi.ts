@@ -78,4 +78,13 @@ export const attendanceApi = {
   forceLogout: (userId: string): Promise<{ success: boolean; message: string; record?: any }> => {
     return apiClient.post<{ success: boolean; message: string; record?: any }>('/attendance/force-logout', { userId });
   },
+
+  deleteRecord: (id: string): Promise<{ success: boolean; message: string }> => {
+    return apiClient.delete<{ success: boolean; message: string }>(`/attendance/${id}`);
+  },
+
+  clearAll: (): Promise<{ success: boolean; message: string; deletedCount: number }> => {
+    return apiClient.delete<{ success: boolean; message: string; deletedCount: number }>('/attendance/clear-all');
+  },
 };
+
