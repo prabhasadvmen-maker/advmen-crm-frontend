@@ -1,4 +1,4 @@
-import { ReactNode, useEffect } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { TopBar } from './TopBar';
@@ -8,6 +8,7 @@ import { useUIStore } from '@/stores/uiStore';
 import { useSessionStore } from '@/stores/sessionStore';
 import { useRealtimeEvents } from '@/hooks/useRealtimeEvents';
 import { cn } from '@/utils/cn';
+import { ShieldAlert, ArrowLeft, Loader2 } from 'lucide-react';
 
 interface PageShellProps {
   children?: ReactNode;
@@ -15,8 +16,18 @@ interface PageShellProps {
 }
 
 export function PageShell({ children, loginRedirectPath }: PageShellProps) {
-  const { sidebarCollapsed } = useUIStore();
-  const { isAuthenticated, isInitialized, isLoading, checkAuthSession } = useSessionStore();
+  const { sidebarCollapsed, addToast } = useUIStore();
+  const {
+    isAuthenticated,
+    isInitialized,
+    isLoading,
+    checkAuthSession,
+    isImpersonating,
+    impersonatorAdminName,
+    stopImpersonation,
+    user,
+  } = useSessionStore();
+  const [isReturningAdmin, setIsReturningAdmin] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
   const effectiveLoginRedirectPath = loginRedirectPath || (
@@ -37,6 +48,24 @@ export function PageShell({ children, loginRedirectPath }: PageShellProps) {
       navigate(effectiveLoginRedirectPath, { replace: true });
     }
   }, [isInitialized, isAuthenticated, isLoading, checkAuthSession, navigate, effectiveLoginRedirectPath]);
+
+  const handleReturnToAdmin = async () => {
+    setIsReturningAdmin(true);
+    try {
+      await stopImpersonation();
+      addToast({
+        type: 'info',
+        title: 'Admin Session Restored',
+        message: 'Successfully returned to administrator workspace.',
+      });
+      navigate('/employees');
+    } catch (err) {
+      console.error('Failed to exit impersonation mode:', err);
+      navigate('/employees');
+    } finally {
+      setIsReturningAdmin(false);
+    }
+  };
 
   if (!isInitialized || isLoading) {
     return (
@@ -65,6 +94,44 @@ export function PageShell({ children, loginRedirectPath }: PageShellProps) {
           sidebarCollapsed ? 'lg:pl-[72px]' : 'lg:pl-[264px]'
         )}
       >
+        {isImpersonating && (
+          <aside
+            aria-label="Admin impersonation notification"
+            className="sticky top-0 z-40 bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 text-white px-4 py-2.5 shadow-md flex items-center justify-between gap-3 text-xs sm:text-sm font-medium border-b border-amber-800/20"
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <ShieldAlert className="w-4 h-4 text-amber-200 shrink-0 animate-pulse" />
+              <div className="truncate">
+                <span>Admin Impersonation Mode: Active as </span>
+                <strong className="underline decoration-amber-300 font-bold">{user.name || 'Employee'}</strong>
+                {user.employeeId && (
+                  <span className="ml-1.5 px-1.5 py-0.5 rounded bg-black/25 text-[11px] font-mono tracking-wider">
+                    {user.employeeId}
+                  </span>
+                )}
+                {impersonatorAdminName && (
+                  <span className="hidden md:inline ml-2 text-amber-100/90 text-xs">
+                    (Authorized by {impersonatorAdminName})
+                  </span>
+                )}
+              </div>
+            </div>
+            <button
+              onClick={handleReturnToAdmin}
+              disabled={isReturningAdmin}
+              type="button"
+              className="inline-flex items-center gap-1.5 px-3 py-1 bg-white text-neutral-900 hover:bg-amber-100 rounded-md font-semibold text-xs transition shadow active:scale-95 disabled:opacity-50 shrink-0 cursor-pointer"
+            >
+              {isReturningAdmin ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <ArrowLeft className="w-3.5 h-3.5" />
+              )}
+              <span>Return to Admin Console</span>
+            </button>
+          </aside>
+        )}
+
         <TopBar />
         <main className="flex-1 p-fib-13 sm:p-fib-21 max-w-7xl w-full mx-auto space-y-fib-21">
           {children ?? <Outlet />}

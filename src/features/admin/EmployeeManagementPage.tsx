@@ -24,8 +24,10 @@ import {
   Briefcase,
   Sparkles,
   Clock,
+  LogIn,
+  LogOut,
 } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 const AVAILABLE_ROLES: { role: UserRole; label: string; description: string }[] = [
   { role: 'SALES_REP', label: 'Sales Representative (Executive)', description: 'Manages sales deals, leads, quotes and client pipelines.' },
@@ -85,6 +87,10 @@ export function EmployeeManagementPage() {
 
   // Copy feedback state
   const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const navigate = useNavigate();
+  const [impersonatingUserId, setImpersonatingUserId] = useState<string | null>(null);
+  const [loggingOutUserId, setLoggingOutUserId] = useState<string | null>(null);
 
   const handleCopy = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
@@ -351,6 +357,57 @@ export function EmployeeManagementPage() {
       });
     } finally {
       setIsDeletingUser(false);
+    }
+  };
+
+  const handleImpersonateLogin = async (emp: UserDto) => {
+    try {
+      setImpersonatingUserId(emp.id);
+      const res = await usersApi.impersonateUser(emp.id);
+      addToast({
+        type: 'success',
+        title: `Switched to ${res.user.name}`,
+        message: `Admin session active. Opening ${res.user.name}'s Employee Dashboard.`,
+      });
+      useSessionStore.getState().startImpersonation({
+        accessToken: res.accessToken,
+        refreshToken: res.refreshToken,
+        user: res.user,
+        adminName: res.adminName,
+      });
+      navigate('/employee', { replace: true });
+    } catch (err: any) {
+      addToast({
+        type: 'danger',
+        title: 'Login Failed',
+        message: err?.message || 'Could not log in as employee.',
+      });
+    } finally {
+      setImpersonatingUserId(null);
+    }
+  };
+
+  const handleForceLogout = async (emp: UserDto) => {
+    if (!window.confirm(`Are you sure you want to remotely logout ${emp.name}?\nTheir dashboard session will be closed immediately and punch-out will be marked by Admin in Attendance.`)) {
+      return;
+    }
+    try {
+      setLoggingOutUserId(emp.id);
+      const res = await usersApi.forceLogoutUser(emp.id);
+      addToast({
+        type: 'success',
+        title: `${emp.name} Logged Out`,
+        message: res.message || 'Employee session terminated and attendance updated by Admin.',
+      });
+      void loadData();
+    } catch (err: any) {
+      addToast({
+        type: 'danger',
+        title: 'Logout Failed',
+        message: err?.message || 'Could not logout employee.',
+      });
+    } finally {
+      setLoggingOutUserId(null);
     }
   };
 
@@ -664,6 +721,34 @@ export function EmployeeManagementPage() {
                       {/* Action Buttons */}
                       <td className="py-3.5 px-4 text-right">
                         <div className="flex items-center justify-end gap-2">
+                          {!isCurrent && emp.isActive && (
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              onClick={() => handleImpersonateLogin(emp)}
+                              disabled={impersonatingUserId === emp.id}
+                              className="text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border-indigo-200"
+                              icon={impersonatingUserId === emp.id ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <LogIn className="w-3.5 h-3.5 text-indigo-600" />}
+                              title={`Directly login into ${emp.name}'s employee workspace`}
+                            >
+                              Login as User
+                            </Button>
+                          )}
+
+                          {!isCurrent && (
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              onClick={() => handleForceLogout(emp)}
+                              disabled={loggingOutUserId === emp.id}
+                              className="text-xs font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 border-amber-200"
+                              icon={loggingOutUserId === emp.id ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <LogOut className="w-3.5 h-3.5 text-amber-600" />}
+                              title={`Remotely logout ${emp.name} and record punch-out in Attendance`}
+                            >
+                              Logout
+                            </Button>
+                          )}
+
                           <Link
                             to={`/attendance?search=${encodeURIComponent(emp.employeeId || emp.name)}`}
                             className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition-colors"

@@ -46,6 +46,21 @@ export interface UserListResponse {
   total: number;
 }
 
+export interface ImpersonateResponse {
+  accessToken: string;
+  refreshToken: string;
+  user: UserDto;
+  redirectUrl: string;
+  impersonated: boolean;
+  adminName: string;
+}
+
+export interface ForceLogoutResponse {
+  success: boolean;
+  message: string;
+  record?: any;
+}
+
 export const usersApi = {
   getUsers: async (params?: { organizationId?: string; role?: string; search?: string }): Promise<UserDto[]> => {
     const searchParams = new URLSearchParams();
@@ -77,5 +92,13 @@ export const usersApi = {
 
   deleteUser: async (id: string): Promise<{ deleted: boolean }> => {
     return await apiClient.delete<{ deleted: boolean }>(`/users/${id}`);
+  },
+
+  impersonateUser: async (userId: string): Promise<ImpersonateResponse> => {
+    return await apiClient.post<ImpersonateResponse>('/auth/impersonate', { userId });
+  },
+
+  forceLogoutUser: async (userId: string): Promise<ForceLogoutResponse> => {
+    return await apiClient.post<ForceLogoutResponse>('/auth/force-logout-employee', { userId });
   },
 };

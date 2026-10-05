@@ -85,6 +85,10 @@ interface SessionState {
   isAuthenticated: boolean;
   isLoading: boolean;
   isInitialized: boolean;
+  isImpersonating: boolean;
+  impersonatorAdminName: string | null;
+  startImpersonation: (data: { accessToken: string; refreshToken?: string; user: any; adminName: string }) => void;
+  stopImpersonation: () => Promise<void>;
   switchOrganization: (orgId: string, orgName: string) => void;
   setUserSession: (session: Partial<UserSession>) => void;
   checkAuthSession: () => Promise<boolean>;
@@ -100,6 +104,56 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   isAuthenticated: false,
   isLoading: false,
   isInitialized: false,
+  isImpersonating: Boolean(localStorage.getItem('salesos.adminBackupToken')),
+  impersonatorAdminName: localStorage.getItem('salesos.adminBackupName') || null,
+
+  startImpersonation: (data: { accessToken: string; refreshToken?: string; user: any; adminName: string }) => {
+    // 1. Back up current admin tokens
+    const currentAdminToken = localStorage.getItem('salesos.accessToken') || '';
+    const currentAdminRefresh = localStorage.getItem('salesos.refreshToken') || '';
+    if (currentAdminToken) {
+      localStorage.setItem('salesos.adminBackupToken', currentAdminToken);
+      if (currentAdminRefresh) localStorage.setItem('salesos.adminBackupRefresh', currentAdminRefresh);
+      localStorage.setItem('salesos.adminBackupName', data.adminName || 'Administrator');
+    }
+
+    // 2. Set employee tokens
+    localStorage.setItem('salesos.accessToken', data.accessToken);
+    sessionStorage.setItem('salesos.accessToken', data.accessToken);
+    if (data.refreshToken) {
+      localStorage.setItem('salesos.refreshToken', data.refreshToken);
+      sessionStorage.setItem('salesos.refreshToken', data.refreshToken);
+    }
+
+    // 3. Update session store
+    get().setUserSession(data.user);
+    set({
+      isImpersonating: true,
+      impersonatorAdminName: data.adminName || 'Administrator',
+    });
+  },
+
+  stopImpersonation: async () => {
+    const adminToken = localStorage.getItem('salesos.adminBackupToken');
+    const adminRefresh = localStorage.getItem('salesos.adminBackupRefresh');
+
+    localStorage.removeItem('salesos.adminBackupToken');
+    localStorage.removeItem('salesos.adminBackupRefresh');
+    localStorage.removeItem('salesos.adminBackupName');
+
+    if (adminToken) {
+      localStorage.setItem('salesos.accessToken', adminToken);
+      sessionStorage.setItem('salesos.accessToken', adminToken);
+      if (adminRefresh) {
+        localStorage.setItem('salesos.refreshToken', adminRefresh);
+        sessionStorage.setItem('salesos.refreshToken', adminRefresh);
+      }
+      set({ isImpersonating: false, impersonatorAdminName: null });
+      await get().checkAuthSession();
+    } else {
+      get().logout();
+    }
+  },
 
   switchOrganization: (orgId: string, orgName: string) => {
     set((state) => ({
@@ -193,6 +247,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 }));
 
 function clearSession(set: (partial: Partial<SessionState>) => void): void {
+  localStorage.removeItem('salesos.adminBackupToken');
+  localStorage.removeItem('salesos.adminBackupRefresh');
+  localStorage.removeItem('salesos.adminBackupName');
   set({
     user: INITIAL_USER,
     organizationId: '',
@@ -201,5 +258,7 @@ function clearSession(set: (partial: Partial<SessionState>) => void): void {
     isAuthenticated: false,
     isInitialized: true,
     isLoading: false,
+    isImpersonating: false,
+    impersonatorAdminName: null,
   });
 }

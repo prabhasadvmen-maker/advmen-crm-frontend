@@ -3,6 +3,8 @@ import { apiClient } from '@/lib/apiClient';
 export interface AttendanceLoginEvent {
   loginTime: string;
   logoutTime?: string;
+  logoutBy?: 'ADMIN' | 'EMPLOYEE' | 'SYSTEM';
+  logoutAdminName?: string;
   ipAddress?: string;
   userAgent?: string;
 }
@@ -21,6 +23,8 @@ export interface AttendanceRecord {
   loginTime: string;
   lastActiveAt: string;
   logoutTime?: string;
+  logoutBy?: 'ADMIN' | 'EMPLOYEE' | 'SYSTEM';
+  logoutAdminName?: string;
   status: 'PRESENT' | 'LATE' | 'HALF_DAY' | 'ON_LEAVE';
   selfieUrl?: string;
   location?: {
@@ -69,5 +73,9 @@ export const attendanceApi = {
 
   syncExternal: (): Promise<{ success: boolean; message: string; syncedCount: number }> => {
     return apiClient.post<{ success: boolean; message: string; syncedCount: number }>('/attendance/sync', {});
+  },
+
+  forceLogout: (userId: string): Promise<{ success: boolean; message: string; record?: any }> => {
+    return apiClient.post<{ success: boolean; message: string; record?: any }>('/attendance/force-logout', { userId });
   },
 };

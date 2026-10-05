@@ -21,7 +21,10 @@ import {
   LogIn,
   LogOut,
   Clock,
+  Shield,
+  User,
 } from 'lucide-react';
+import { useUIStore } from '@/stores/uiStore';
 
 interface EmployeeMonthSummary {
   userId: string;
@@ -132,14 +135,23 @@ const getLoginEvents = (record: AttendanceRecord): AttendanceLoginEvent[] => {
     const events = record.loginEvents.map((e) => ({
       ...e,
       logoutTime: sanitizeLogout(e.logoutTime),
+      logoutBy: e.logoutBy || record.logoutBy,
+      logoutAdminName: e.logoutAdminName || record.logoutAdminName,
     })).sort(
       (a, b) => (parseToValidDate(a.loginTime, record.date)?.getTime() || 0) - (parseToValidDate(b.loginTime, record.date)?.getTime() || 0)
     );
     if ((parseToValidDate(record.loginTime, record.date)?.getTime() || 0) < (parseToValidDate(events[0].loginTime, record.date)?.getTime() || 0)) {
-      events.unshift({ loginTime: record.loginTime, logoutTime: recLogout });
+      events.unshift({
+        loginTime: record.loginTime,
+        logoutTime: recLogout,
+        logoutBy: record.logoutBy,
+        logoutAdminName: record.logoutAdminName,
+      });
     }
     if (recLogout && !events[events.length - 1].logoutTime) {
       events[events.length - 1].logoutTime = recLogout;
+      events[events.length - 1].logoutBy = record.logoutBy;
+      events[events.length - 1].logoutAdminName = record.logoutAdminName;
     }
     return events;
   }
@@ -147,6 +159,8 @@ const getLoginEvents = (record: AttendanceRecord): AttendanceLoginEvent[] => {
     {
       loginTime: record.loginTime,
       logoutTime: recLogout,
+      logoutBy: record.logoutBy,
+      logoutAdminName: record.logoutAdminName,
       ipAddress: record.ipAddress,
       userAgent: record.userAgent,
     },
@@ -235,6 +249,8 @@ export function AttendancePage() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
   const [error, setError] = useState('');
+  const [loggingOutUserId, setLoggingOutUserId] = useState<string | null>(null);
+  const { addToast } = useUIStore();
 
   const loadAttendance = useCallback(async () => {
     setIsLoading(true);
@@ -273,6 +289,30 @@ export function AttendancePage() {
       setTimeout(() => setSyncFeedback(null), 5000);
     } finally {
       setIsSyncing(false);
+    }
+  };
+
+  const handleForceLogout = async (record: AttendanceRecord) => {
+    if (!window.confirm(`Are you sure you want to remotely logout ${record.userName}?\nTheir dashboard session will be closed immediately and punch-out will be recorded in Attendance as 'ADMIN'.`)) {
+      return;
+    }
+    try {
+      setLoggingOutUserId(record.userId);
+      const res = await attendanceApi.forceLogout(record.userId);
+      addToast({
+        type: 'success',
+        title: `${record.userName} Logged Out`,
+        message: res.message || 'Employee session terminated and attendance updated by Admin.',
+      });
+      await loadAttendance();
+    } catch (err: any) {
+      addToast({
+        type: 'danger',
+        title: 'Logout Failed',
+        message: err?.message || 'Could not logout employee.',
+      });
+    } finally {
+      setLoggingOutUserId(null);
     }
   };
 
@@ -730,15 +770,46 @@ export function AttendancePage() {
                       {/* Logout Timing */}
                       <td className="px-4 py-3 whitespace-nowrap">
                         {record.logoutTime && String(record.logoutTime).toLowerCase() !== 'invalid date' ? (
-                          <div className="inline-flex items-center gap-1.5 font-mono font-bold text-xs text-amber-800 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200 shadow-2xs">
-                            <LogOut className="h-3.5 w-3.5 text-amber-600 shrink-0" />
-                            <span>{formatExactTime(record.logoutTime, record.date)}</span>
+                          <div className="flex flex-col gap-1 items-start">
+                            <div className="inline-flex items-center gap-1.5 font-mono font-bold text-xs text-amber-800 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200 shadow-2xs">
+                              <LogOut className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                              <span>{formatExactTime(record.logoutTime, record.date)}</span>
+                            </div>
+                            {record.logoutBy === 'ADMIN' ? (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-200 font-mono" title={`Remotely punched out by ${record.logoutAdminName || 'Admin'}`}>
+                                <Shield className="w-3 h-3 text-rose-600" />
+                                <span>Admin {record.logoutAdminName ? `(${record.logoutAdminName})` : ''}</span>
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200 font-mono">
+                                <User className="w-3 h-3 text-blue-600" />
+                                <span>Employee</span>
+                              </span>
+                            )}
                           </div>
                         ) : (
-                          <span className="inline-flex items-center gap-1.5 font-semibold text-xs text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
-                            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                            <span>Active (Working)</span>
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="inline-flex items-center gap-1.5 font-semibold text-xs text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
+                              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                              <span>Active</span>
+                            </span>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleForceLogout(record);
+                              }}
+                              disabled={loggingOutUserId === record.userId}
+                              className="px-2 py-1 text-[10px] font-bold rounded-md bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                              title="Remotely logout employee & record attendance punch-out as Admin"
+                            >
+                              {loggingOutUserId === record.userId ? (
+                                <RefreshCw className="w-3 h-3 animate-spin text-rose-600" />
+                              ) : (
+                                <LogOut className="w-3 h-3 text-rose-600" />
+                              )}
+                              <span>Logout</span>
+                            </button>
+                          </div>
                         )}
                       </td>
 
@@ -1202,13 +1273,38 @@ export function AttendancePage() {
                                   >
                                     {hasLogout ? formatExactTime(event.logoutTime, record.date) : 'Not Logged Out Yet'}
                                   </div>
-                                  <div
-                                    className={`text-[11px] mt-0.5 ${
-                                      hasLogout ? 'text-amber-700' : 'text-blue-700'
-                                    }`}
-                                  >
-                                    {hasLogout ? formatDateTime(event.logoutTime!, record.date) : '🟢 Session active / working'}
-                                  </div>
+                                  {hasLogout ? (
+                                    <>
+                                      <div className="text-[11px] text-amber-700 mt-0.5">
+                                        {formatDateTime(event.logoutTime!, record.date)}
+                                      </div>
+                                      <div className="mt-1.5 flex items-center gap-1.5">
+                                        {event.logoutBy === 'ADMIN' ? (
+                                          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-200 font-mono">
+                                            <Shield className="w-3 h-3 text-rose-600" />
+                                            <span>Admin {event.logoutAdminName ? `(${event.logoutAdminName})` : ''}</span>
+                                          </span>
+                                        ) : (
+                                          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200 font-mono">
+                                            <User className="w-3 h-3 text-blue-600" />
+                                            <span>Employee</span>
+                                          </span>
+                                        )}
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <div className="mt-1 flex items-center justify-between">
+                                      <span className="text-[11px] text-blue-700">🟢 Session active</span>
+                                      <button
+                                        onClick={() => handleForceLogout(record)}
+                                        disabled={loggingOutUserId === record.userId}
+                                        className="px-2 py-1 text-[10px] font-bold rounded bg-rose-600 hover:bg-rose-700 text-white transition-colors flex items-center gap-1 cursor-pointer"
+                                      >
+                                        <LogOut className="w-3 h-3" />
+                                        <span>Force Logout</span>
+                                      </button>
+                                    </div>
+                                  )}
                                 </div>
                               </div>
 

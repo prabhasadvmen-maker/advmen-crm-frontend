@@ -112,6 +112,20 @@ export function useRealtimeEvents() {
       });
     };
 
+    const handleForceLogout = (payload: { userId: string; adminName?: string }) => {
+      if (user?.id && payload.userId === user.id) {
+        addToast({
+          type: 'danger',
+          title: 'Session Terminated by Admin',
+          message: `Your active workspace session was logged out remotely by ${payload.adminName || 'Admin'}.`,
+        });
+        useSessionStore.getState().logout();
+        setTimeout(() => {
+          window.location.href = '/login?logout=admin';
+        }, 1200);
+      }
+    };
+
     socket.on('deal:stage_changed', handleDealStageChanged);
     socket.on('deal:won', handleDealWon);
     socket.on('lead:created', handleLeadUpdated);
@@ -120,6 +134,7 @@ export function useRealtimeEvents() {
     socket.on('call:completed', handleCallCompleted);
     socket.on('payment:received', handleInvoicePaid);
     socket.on('task:created', handleTaskCreated);
+    socket.on('auth:force-logout', handleForceLogout);
 
     return () => {
       socket.off('deal:stage_changed', handleDealStageChanged);
@@ -130,6 +145,7 @@ export function useRealtimeEvents() {
       socket.off('call:completed', handleCallCompleted);
       socket.off('payment:received', handleInvoicePaid);
       socket.off('task:created', handleTaskCreated);
+      socket.off('auth:force-logout', handleForceLogout);
     };
   }, [isAuthenticated, organizationId, user?.id, queryClient, addToast, addNotification, fetchInitialActivities]);
 }
