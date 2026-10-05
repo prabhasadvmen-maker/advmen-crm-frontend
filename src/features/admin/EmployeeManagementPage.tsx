@@ -7,7 +7,12 @@ import { useSessionStore } from '@/stores/sessionStore';
 import { UserRole, Lead } from '@/types';
 import { usersApi, UserDto } from './api/usersApi';
 import { leadApi } from '@/features/leads/api/leadApi';
-import { departmentApi, DEFAULT_DEPARTMENTS } from './api/departmentApi';
+import {
+  departmentApi,
+  DEFAULT_DEPARTMENTS,
+  DEFAULT_DEPARTMENT_ROLES,
+  DepartmentRoleItem,
+} from './api/departmentApi';
 import {
   Users,
   UserCheck,
@@ -61,7 +66,11 @@ export function EmployeeManagementPage() {
   const [newName, setNewName] = useState('');
   const [newPhone, setNewPhone] = useState('');
   const [newEmail, setNewEmail] = useState('');
-  const [newRole, setNewRole] = useState<UserRole>('SALES_REP');
+  const [newRole, setNewRole] = useState<string>('SALES_REP');
+  const [newRoleLabel, setNewRoleLabel] = useState<string>('Sales Representative (Executive)');
+  const [deptRolesMap, setDeptRolesMap] = useState<Record<string, DepartmentRoleItem[]>>(DEFAULT_DEPARTMENT_ROLES);
+  const [isAddingCustomRole, setIsAddingCustomRole] = useState(false);
+  const [customRoleInput, setCustomRoleInput] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [department, setDepartment] = useState('Sales');
   const [departments, setDepartments] = useState<string[]>(DEFAULT_DEPARTMENTS);
@@ -155,7 +164,7 @@ export function EmployeeManagementPage() {
     loadData(true);
   }, [loadData]);
 
-  // Load active departments from backend
+  // Load active departments and department roles from backend
   useEffect(() => {
     departmentApi
       .getDepartments()
@@ -165,7 +174,42 @@ export function EmployeeManagementPage() {
         }
       })
       .catch(() => {});
+
+    departmentApi
+      .getDepartmentRoles()
+      .then((roles) => {
+        if (roles && typeof roles === 'object') {
+          setDeptRolesMap((prev) => ({ ...prev, ...roles }));
+        }
+      })
+      .catch(() => {});
   }, []);
+
+  // Compute available roles specifically for the selected department
+  const currentDepartmentRoles = useMemo<DepartmentRoleItem[]>(() => {
+    const roles = deptRolesMap[department] || DEFAULT_DEPARTMENT_ROLES[department];
+    if (roles && roles.length > 0) return roles;
+    // Generic fallback if user created a custom department with no roles yet
+    const prefix = department.toUpperCase().replace(/[^A-Z0-9]/gi, '_');
+    return [
+      { role: `${prefix}_EXECUTIVE`, label: `${department} Executive`, description: `Executive in ${department}` },
+      { role: `${prefix}_SPECIALIST`, label: `${department} Specialist / Analyst`, description: `Specialist in ${department}` },
+      { role: `${prefix}_MANAGER`, label: `${department} Manager`, description: `Management in ${department}` },
+    ];
+  }, [deptRolesMap, department]);
+
+  // When department changes, auto-select its first matching role
+  useEffect(() => {
+    if (currentDepartmentRoles.length > 0) {
+      const match = currentDepartmentRoles.find((r) => r.role === newRole);
+      if (!match) {
+        setNewRole(currentDepartmentRoles[0].role);
+        setNewRoleLabel(currentDepartmentRoles[0].label);
+      } else {
+        setNewRoleLabel(match.label);
+      }
+    }
+  }, [department, currentDepartmentRoles]);
 
   // Dynamically include any existing employees' custom departments
   useEffect(() => {
@@ -217,6 +261,49 @@ export function EmployeeManagementPage() {
     }
   };
 
+  // Handle adding a custom role under the current department
+  const handleAddCustomRole = async () => {
+    const trimmed = customRoleInput.trim();
+    if (!trimmed || trimmed.length < 2) {
+      addToast({
+        type: 'warning',
+        title: 'Role Name Required',
+        message: 'Please enter a role designation with at least 2 characters.',
+      });
+      return;
+    }
+
+    const cleanRoleKey = trimmed.toUpperCase().replace(/[^A-Z0-9]/gi, '_').replace(/__+/g, '_');
+    const newRoleItem: DepartmentRoleItem = {
+      role: cleanRoleKey,
+      label: trimmed,
+      description: `${trimmed} in ${department}`,
+    };
+
+    setDeptRolesMap((prev) => ({
+      ...prev,
+      [department]: [...(prev[department] || currentDepartmentRoles), newRoleItem],
+    }));
+    setNewRole(cleanRoleKey);
+    setNewRoleLabel(trimmed);
+    setIsAddingCustomRole(false);
+    setCustomRoleInput('');
+
+    try {
+      await departmentApi.addDepartmentRole(department, {
+        role: cleanRoleKey,
+        label: trimmed,
+      });
+      addToast({
+        type: 'success',
+        title: 'Role Added',
+        message: `Role "${trimmed}" created for ${department}.`,
+      });
+    } catch (err: any) {
+      console.warn('Custom role save note:', err?.message);
+    }
+  };
+
   // Load Leads for a specific employee
   const handleOpenViewLeads = async (employee: UserDto) => {
     setViewLeadsEmployee(employee);
@@ -252,7 +339,8 @@ export function EmployeeManagementPage() {
         phone: newPhone.trim() || undefined,
         password: newPassword,
         role: newRole,
-        department: department.trim() || 'Sales Operations',
+        designation: newRoleLabel || newRole,
+        department: department.trim() || 'Sales',
         organizationId: organizationId || currentUser?.organizationId || '',
       });
 
@@ -492,6 +580,19 @@ export function EmployeeManagementPage() {
     }
   };
 
+  // Unique list of all distinct roles/designations present in the team
+  const allDistinctRoleOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    AVAILABLE_ROLES.forEach((r) => map.set(r.role, r.label));
+    employees.forEach((emp) => {
+      if (emp.role) {
+        const label = emp.designation || emp.role.replace(/_/g, ' ');
+        map.set(emp.role, label);
+      }
+    });
+    return Array.from(map.entries()).map(([role, label]) => ({ role, label }));
+  }, [employees]);
+
   // Filtered Roster
   const filteredEmployees = useMemo(() => {
     return employees.filter((e) => {
@@ -501,9 +602,14 @@ export function EmployeeManagementPage() {
         e.email.toLowerCase().includes(q) ||
         (e.employeeId && e.employeeId.toLowerCase().includes(q)) ||
         (e.phone && e.phone.includes(q)) ||
+        (e.designation && e.designation.toLowerCase().includes(q)) ||
+        (e.role && e.role.toLowerCase().includes(q)) ||
         (e.department && e.department.toLowerCase().includes(q));
 
-      const matchesRole = roleFilter === 'ALL' || e.role === roleFilter;
+      const matchesRole =
+        roleFilter === 'ALL' ||
+        e.role === roleFilter ||
+        (e.designation && e.designation.toLowerCase() === roleFilter.toLowerCase());
       const matchesDepartment =
         departmentFilter === 'ALL' ||
         (e.department && e.department.toLowerCase() === departmentFilter.toLowerCase());
@@ -672,7 +778,7 @@ export function EmployeeManagementPage() {
               className="px-3 py-2 rounded-xl border border-neutral-300 text-xs font-medium text-neutral-700 focus:outline-none focus:border-blue-500 bg-white"
             >
               <option value="ALL">All Roles ({employees.length})</option>
-              {AVAILABLE_ROLES.map((r) => (
+              {allDistinctRoleOptions.map((r) => (
                 <option key={r.role} value={r.role}>
                   {r.label}
                 </option>
@@ -785,7 +891,7 @@ export function EmployeeManagementPage() {
                       <td className="py-3.5 px-4">
                         <div className="space-y-1">
                           <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold font-mono bg-blue-50 text-blue-800 border border-blue-200">
-                            {emp.role.replace(/_/g, ' ')}
+                            {emp.designation || (emp.role ? emp.role.replace(/_/g, ' ') : 'Employee')}
                           </span>
                           <span className="text-[11px] text-neutral-500 block">
                             {emp.department || 'Sales Operations'}
@@ -959,23 +1065,7 @@ export function EmployeeManagementPage() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="text-xs font-bold text-neutral-800 block mb-1">
-                Role *
-              </label>
-              <select
-                value={newRole}
-                onChange={(e) => setNewRole(e.target.value as UserRole)}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-neutral-300 text-xs font-medium focus:outline-none focus:border-blue-500 bg-white"
-              >
-                {AVAILABLE_ROLES.map((r) => (
-                  <option key={r.role} value={r.role}>
-                    {r.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
+            {/* 1. DEPARTMENT SELECTOR */}
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="text-xs font-bold text-neutral-800">
@@ -991,7 +1081,7 @@ export function EmployeeManagementPage() {
                     className="inline-flex items-center gap-1 text-[11px] text-blue-600 hover:text-blue-800 font-bold hover:underline cursor-pointer"
                   >
                     <Plus className="w-3 h-3" />
-                    <span>+ New Department</span>
+                    <span>+ New Dept</span>
                   </button>
                 ) : (
                   <button
@@ -1041,7 +1131,7 @@ export function EmployeeManagementPage() {
                       setDepartment(e.target.value);
                     }
                   }}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-neutral-300 text-xs font-medium focus:outline-none focus:border-blue-500 bg-white"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-neutral-300 text-xs font-semibold focus:outline-none focus:border-blue-500 bg-white text-neutral-800"
                 >
                   {departments.map((d) => (
                     <option key={d} value={d}>
@@ -1050,6 +1140,88 @@ export function EmployeeManagementPage() {
                   ))}
                   <option value="__NEW__" className="font-bold text-blue-600">
                     + Add New Department...
+                  </option>
+                </select>
+              )}
+            </div>
+
+            {/* 2. DEPARTMENT-SPECIFIC ROLE SELECTOR */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs font-bold text-neutral-800">
+                  Role ({department}) *
+                </label>
+                {!isAddingCustomRole ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsAddingCustomRole(true);
+                      setCustomRoleInput('');
+                    }}
+                    className="inline-flex items-center gap-1 text-[11px] text-blue-600 hover:text-blue-800 font-bold hover:underline cursor-pointer"
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>+ Custom Role</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setIsAddingCustomRole(false)}
+                    className="text-[11px] text-neutral-500 hover:text-neutral-700 font-medium cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                )}
+              </div>
+
+              {isAddingCustomRole ? (
+                <div className="flex items-center gap-1.5 p-1 rounded-xl border-2 border-indigo-500 bg-indigo-50/50">
+                  <input
+                    type="text"
+                    autoFocus
+                    value={customRoleInput}
+                    onChange={(e) => setCustomRoleInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        void handleAddCustomRole();
+                      } else if (e.key === 'Escape') {
+                        setIsAddingCustomRole(false);
+                      }
+                    }}
+                    placeholder={`e.g. Lead ${department} Specialist`}
+                    className="flex-1 px-2.5 py-1.5 text-xs rounded-lg border border-neutral-300 bg-white font-medium focus:outline-none focus:border-indigo-600"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void handleAddCustomRole()}
+                    className="px-3 py-1.5 text-xs font-bold rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition shadow-xs cursor-pointer shrink-0"
+                  >
+                    Add
+                  </button>
+                </div>
+              ) : (
+                <select
+                  value={newRole}
+                  onChange={(e) => {
+                    if (e.target.value === '__CUSTOM_ROLE__') {
+                      setIsAddingCustomRole(true);
+                      setCustomRoleInput('');
+                    } else {
+                      setNewRole(e.target.value);
+                      const matched = currentDepartmentRoles.find((r) => r.role === e.target.value);
+                      if (matched) setNewRoleLabel(matched.label);
+                    }
+                  }}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-neutral-300 text-xs font-semibold focus:outline-none focus:border-blue-500 bg-white text-neutral-800"
+                >
+                  {currentDepartmentRoles.map((r) => (
+                    <option key={r.role} value={r.role}>
+                      {r.label}
+                    </option>
+                  ))}
+                  <option value="__CUSTOM_ROLE__" className="font-bold text-indigo-600">
+                    + Add Custom Role...
                   </option>
                 </select>
               )}

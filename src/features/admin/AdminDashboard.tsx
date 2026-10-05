@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { KPICard } from '@/components/patterns/KPICard';
 import { WidgetBoundary } from '@/components/system/WidgetBoundary';
@@ -9,6 +9,7 @@ import { useUIStore } from '@/stores/uiStore';
 import { useSessionStore } from '@/stores/sessionStore';
 import { organizationsApi, TenantOrgDto, DashboardStatsDto } from './api/organizationsApi';
 import { usersApi, UserDto } from './api/usersApi';
+import { DEFAULT_DEPARTMENTS, DEFAULT_DEPARTMENT_ROLES, DepartmentRoleItem } from './api/departmentApi';
 import { UserRole } from '@/types';
 import {
   Server,
@@ -101,10 +102,27 @@ export function AdminDashboard() {
   const [newUserName, setNewUserName] = useState('');
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserPhone, setNewUserPhone] = useState('');
-  const [newUserRole, setNewUserRole] = useState<UserRole>('SALES_REP');
+  const [newUserRole, setNewUserRole] = useState<string>('SALES_REP');
+  const [newUserRoleLabel, setNewUserRoleLabel] = useState<string>('Sales Representative (Executive)');
   const [newUserPassword, setNewUserPassword] = useState('');
-  const [newUserDept, setNewUserDept] = useState('Sales & Outreach');
+  const [newUserDept, setNewUserDept] = useState('Sales');
   const [isSubmittingUser, setIsSubmittingUser] = useState(false);
+
+  const currentAdminDeptRoles = useMemo<DepartmentRoleItem[]>(() => {
+    return DEFAULT_DEPARTMENT_ROLES[newUserDept] || DEFAULT_DEPARTMENT_ROLES['Sales'] || [];
+  }, [newUserDept]);
+
+  useEffect(() => {
+    if (currentAdminDeptRoles.length > 0) {
+      const match = currentAdminDeptRoles.find((r) => r.role === newUserRole);
+      if (!match) {
+        setNewUserRole(currentAdminDeptRoles[0].role);
+        setNewUserRoleLabel(currentAdminDeptRoles[0].label);
+      } else {
+        setNewUserRoleLabel(match.label);
+      }
+    }
+  }, [newUserDept, currentAdminDeptRoles]);
 
   // Delete User State
   const [userToDelete, setUserToDelete] = useState<UserDto | null>(null);
@@ -242,12 +260,18 @@ export function AdminDashboard() {
         phone: cleanPhone,
         password: newUserPassword,
         role: newUserRole,
-        department: newUserDept.trim() || 'Sales & Outreach',
+        designation: newUserRoleLabel || newUserRole,
+        department: newUserDept.trim() || 'Sales',
         organizationId: orgId,
       });
 
       // Ensure phone is set on local state
-      const userWithPhone = { ...createdUser, phone: cleanPhone, department: newUserDept.trim() };
+      const userWithPhone = {
+        ...createdUser,
+        phone: cleanPhone,
+        department: newUserDept.trim() || 'Sales',
+        designation: newUserRoleLabel || newUserRole,
+      };
 
       setUsers((prev) => [userWithPhone, ...prev.filter((u) => u.id !== createdUser.id)]);
       setIsNewUserOpen(false);
@@ -256,8 +280,9 @@ export function AdminDashboard() {
       setNewUserEmail('');
       setNewUserPhone('');
       setNewUserRole('SALES_REP');
+      setNewUserRoleLabel('Sales Representative (Executive)');
       setNewUserPassword('');
-      setNewUserDept('Sales & Outreach');
+      setNewUserDept('Sales');
 
       addToast({
         type: 'success',
@@ -1196,26 +1221,27 @@ export function AdminDashboard() {
                   onChange={(e) => setNewUserDept(e.target.value)}
                   className="w-full px-3 py-2 rounded-lg border border-neutral-200 text-xs bg-white font-medium focus:outline-none focus:border-blue-500"
                 >
-                  <option value="Sales">Sales</option>
-                  <option value="Intern">Intern</option>
-                  <option value="IT Department">IT Department</option>
-                  <option value="SEO">SEO</option>
-                  <option value="Marketing">Marketing</option>
-                  <option value="Operations">Operations</option>
-                  <option value="Customer Support">Customer Support</option>
-                  <option value="Finance & Accounts">Finance & Accounts</option>
+                  {DEFAULT_DEPARTMENTS.map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
                 </select>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-neutral-700">Role / Clearance</label>
+                  <label className="text-xs font-semibold text-neutral-700">Role ({newUserDept})</label>
                   <select
                     value={newUserRole}
-                    onChange={(e) => setNewUserRole(e.target.value as UserRole)}
+                    onChange={(e) => {
+                      setNewUserRole(e.target.value);
+                      const matched = currentAdminDeptRoles.find((r) => r.role === e.target.value);
+                      if (matched) setNewUserRoleLabel(matched.label);
+                    }}
                     className="w-full px-3 py-2 rounded-lg border border-neutral-200 text-xs bg-white font-medium focus:outline-none focus:border-blue-500"
                   >
-                    {AVAILABLE_ROLES.map((r) => (
+                    {currentAdminDeptRoles.map((r) => (
                       <option key={r.role} value={r.role}>
                         {r.label}
                       </option>

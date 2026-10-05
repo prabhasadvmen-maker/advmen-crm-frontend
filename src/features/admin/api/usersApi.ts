@@ -6,7 +6,8 @@ export interface UserDto {
   name: string;
   email: string;
   employeeId?: string;
-  role: UserRole;
+  role: UserRole | string;
+  designation?: string;
   department?: string;
   phone?: string;
   avatarUrl?: string;
@@ -22,7 +23,8 @@ export interface CreateUserDto {
   name: string;
   email: string;
   password: string;
-  role: UserRole;
+  role: UserRole | string;
+  designation?: string;
   department?: string;
   phone?: string;
   avatarUrl?: string;
@@ -31,7 +33,8 @@ export interface CreateUserDto {
 
 export interface UpdateUserDto {
   name?: string;
-  role?: UserRole;
+  role?: UserRole | string;
+  designation?: string;
   department?: string;
   phone?: string;
   avatarUrl?: string;
