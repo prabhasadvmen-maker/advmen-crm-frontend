@@ -1196,12 +1196,14 @@ export function AdminDashboard() {
                   onChange={(e) => setNewUserDept(e.target.value)}
                   className="w-full px-3 py-2 rounded-lg border border-neutral-200 text-xs bg-white font-medium focus:outline-none focus:border-blue-500"
                 >
-                  <option value="Sales & Outreach">Sales & Business Development</option>
-                  <option value="Telecalling & Telesales">Telecalling & Calling Agent</option>
-                  <option value="Customer Support & Service">Customer Support & Success</option>
-                  <option value="Marketing & Inbound SDR">Marketing & Inbound Leads</option>
-                  <option value="Operations & Logistics">Operations & Logistics</option>
-                  <option value="Finance & Accounts">Finance & Invoicing</option>
+                  <option value="Sales">Sales</option>
+                  <option value="Intern">Intern</option>
+                  <option value="IT Department">IT Department</option>
+                  <option value="SEO">SEO</option>
+                  <option value="Marketing">Marketing</option>
+                  <option value="Operations">Operations</option>
+                  <option value="Customer Support">Customer Support</option>
+                  <option value="Finance & Accounts">Finance & Accounts</option>
                 </select>
               </div>
 

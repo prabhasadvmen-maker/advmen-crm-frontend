@@ -7,6 +7,7 @@ import { useSessionStore } from '@/stores/sessionStore';
 import { UserRole, Lead } from '@/types';
 import { usersApi, UserDto } from './api/usersApi';
 import { leadApi } from '@/features/leads/api/leadApi';
+import { departmentApi, DEFAULT_DEPARTMENTS } from './api/departmentApi';
 import {
   Users,
   UserCheck,
@@ -26,6 +27,7 @@ import {
   Clock,
   LogIn,
   LogOut,
+  Plus,
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 
@@ -61,7 +63,11 @@ export function EmployeeManagementPage() {
   const [newEmail, setNewEmail] = useState('');
   const [newRole, setNewRole] = useState<UserRole>('SALES_REP');
   const [newPassword, setNewPassword] = useState('');
-  const [department, setDepartment] = useState('Sales & Business Development');
+  const [department, setDepartment] = useState('Sales');
+  const [departments, setDepartments] = useState<string[]>(DEFAULT_DEPARTMENTS);
+  const [isAddingNewDept, setIsAddingNewDept] = useState(false);
+  const [newDeptInput, setNewDeptInput] = useState('');
+  const [departmentFilter, setDepartmentFilter] = useState('ALL');
   const [isSubmittingUser, setIsSubmittingUser] = useState(false);
 
   // Single Employee Assign Modal
@@ -149,6 +155,68 @@ export function EmployeeManagementPage() {
     loadData(true);
   }, [loadData]);
 
+  // Load active departments from backend
+  useEffect(() => {
+    departmentApi
+      .getDepartments()
+      .then((fetched) => {
+        if (Array.isArray(fetched) && fetched.length > 0) {
+          setDepartments(fetched);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // Dynamically include any existing employees' custom departments
+  useEffect(() => {
+    if (employees.length > 0) {
+      setDepartments((prev) => {
+        const set = new Set(prev);
+        employees.forEach((emp) => {
+          if (emp.department && emp.department.trim()) {
+            set.add(emp.department.trim());
+          }
+        });
+        return Array.from(set);
+      });
+    }
+  }, [employees]);
+
+  // Handle adding new custom department
+  const handleAddNewDepartment = async () => {
+    const trimmed = newDeptInput.trim();
+    if (!trimmed || trimmed.length < 2) {
+      addToast({
+        type: 'warning',
+        title: 'Department Name Required',
+        message: 'Please enter a department name with at least 2 characters.',
+      });
+      return;
+    }
+
+    setDepartments((prev) => {
+      if (prev.some((d) => d.toLowerCase() === trimmed.toLowerCase())) return prev;
+      return [...prev, trimmed];
+    });
+    setDepartment(trimmed);
+    setIsAddingNewDept(false);
+    setNewDeptInput('');
+
+    try {
+      const updatedList = await departmentApi.createDepartment(trimmed);
+      if (Array.isArray(updatedList) && updatedList.length > 0) {
+        setDepartments(updatedList);
+      }
+      addToast({
+        type: 'success',
+        title: 'Department Added',
+        message: `Department "${trimmed}" added and selected.`,
+      });
+    } catch (err: any) {
+      console.warn('Custom department save note:', err?.message);
+    }
+  };
+
   // Load Leads for a specific employee
   const handleOpenViewLeads = async (employee: UserDto) => {
     setViewLeadsEmployee(employee);
@@ -196,8 +264,9 @@ export function EmployeeManagementPage() {
       setNewPhone('');
       setNewEmail('');
       setNewRole('SALES_REP');
-      setNewPassword('');
-      setDepartment('Sales & Business Development');
+      setDepartment(departments[0] || 'Sales');
+      setIsAddingNewDept(false);
+      setNewDeptInput('');
 
       addToast({
         type: 'success',
@@ -435,9 +504,13 @@ export function EmployeeManagementPage() {
         (e.department && e.department.toLowerCase().includes(q));
 
       const matchesRole = roleFilter === 'ALL' || e.role === roleFilter;
-      return matchesSearch && matchesRole;
+      const matchesDepartment =
+        departmentFilter === 'ALL' ||
+        (e.department && e.department.toLowerCase() === departmentFilter.toLowerCase());
+
+      return matchesSearch && matchesRole && matchesDepartment;
     });
-  }, [employees, searchQuery, roleFilter]);
+  }, [employees, searchQuery, roleFilter, departmentFilter]);
 
   // Aggregate stats
   const totalAssignedLeads = useMemo(() => {
@@ -592,7 +665,7 @@ export function EmployeeManagementPage() {
             />
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2.5">
             <select
               value={roleFilter}
               onChange={(e) => setRoleFilter(e.target.value)}
@@ -602,6 +675,19 @@ export function EmployeeManagementPage() {
               {AVAILABLE_ROLES.map((r) => (
                 <option key={r.role} value={r.role}>
                   {r.label}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={departmentFilter}
+              onChange={(e) => setDepartmentFilter(e.target.value)}
+              className="px-3 py-2 rounded-xl border border-neutral-300 text-xs font-medium text-neutral-700 focus:outline-none focus:border-blue-500 bg-white"
+            >
+              <option value="ALL">All Departments</option>
+              {departments.map((d) => (
+                <option key={d} value={d}>
+                  {d}
                 </option>
               ))}
             </select>
@@ -891,16 +977,82 @@ export function EmployeeManagementPage() {
             </div>
 
             <div>
-              <label className="text-xs font-bold text-neutral-800 block mb-1">
-                Department
-              </label>
-              <input
-                type="text"
-                value={department}
-                onChange={(e) => setDepartment(e.target.value)}
-                placeholder="e.g. Sales & Business Development"
-                className="w-full px-3.5 py-2.5 rounded-xl border border-neutral-300 text-xs focus:outline-none focus:border-blue-500 font-medium"
-              />
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs font-bold text-neutral-800">
+                  Department *
+                </label>
+                {!isAddingNewDept ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsAddingNewDept(true);
+                      setNewDeptInput('');
+                    }}
+                    className="inline-flex items-center gap-1 text-[11px] text-blue-600 hover:text-blue-800 font-bold hover:underline cursor-pointer"
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>+ New Department</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setIsAddingNewDept(false)}
+                    className="text-[11px] text-neutral-500 hover:text-neutral-700 font-medium cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                )}
+              </div>
+
+              {isAddingNewDept ? (
+                <div className="flex items-center gap-1.5 p-1 rounded-xl border-2 border-blue-500 bg-blue-50/50">
+                  <input
+                    type="text"
+                    autoFocus
+                    value={newDeptInput}
+                    onChange={(e) => setNewDeptInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        void handleAddNewDepartment();
+                      } else if (e.key === 'Escape') {
+                        setIsAddingNewDept(false);
+                      }
+                    }}
+                    placeholder="e.g. Sales / Intern / IT Department / SEO"
+                    className="flex-1 px-2.5 py-1.5 text-xs rounded-lg border border-neutral-300 bg-white font-medium focus:outline-none focus:border-blue-600"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void handleAddNewDepartment()}
+                    className="px-3 py-1.5 text-xs font-bold rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition shadow-xs cursor-pointer shrink-0"
+                  >
+                    Add
+                  </button>
+                </div>
+              ) : (
+                <select
+                  value={department}
+                  onChange={(e) => {
+                    if (e.target.value === '__NEW__') {
+                      setIsAddingNewDept(true);
+                      setNewDeptInput('');
+                    } else {
+                      setDepartment(e.target.value);
+                    }
+                  }}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-neutral-300 text-xs font-medium focus:outline-none focus:border-blue-500 bg-white"
+                >
+                  {departments.map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
+                  <option value="__NEW__" className="font-bold text-blue-600">
+                    + Add New Department...
+                  </option>
+                </select>
+              )}
             </div>
           </div>
 
