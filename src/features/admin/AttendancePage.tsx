@@ -124,19 +124,27 @@ function parseToValidDate(value?: any, fallbackDateStr?: string): Date | null {
 }
 
 const getLoginEvents = (record: AttendanceRecord): AttendanceLoginEvent[] => {
-  const sanitizeLogout = (val?: string) => {
+  const sanitizeLogout = (val?: string, logTime?: string) => {
     if (!val || val.toLowerCase() === 'null' || val.toLowerCase() === 'undefined' || val.toLowerCase() === 'invalid date') {
       return undefined;
+    }
+    // If logout time is within 3 seconds of login time, employee hasn't logged out yet (Active session!)
+    if (logTime) {
+      const logD = parseToValidDate(logTime, record.date);
+      const outD = parseToValidDate(val, record.date);
+      if (logD && outD && Math.abs(outD.getTime() - logD.getTime()) <= 3000) {
+        return undefined;
+      }
     }
     return val;
   };
 
-  const recLogout = sanitizeLogout(record.logoutTime);
+  const recLogout = sanitizeLogout(record.logoutTime, record.loginTime);
 
   if (record.loginEvents?.length) {
     const events = record.loginEvents.map((e) => ({
       ...e,
-      logoutTime: sanitizeLogout(e.logoutTime),
+      logoutTime: sanitizeLogout(e.logoutTime, e.loginTime || record.loginTime),
       logoutBy: e.logoutBy || record.logoutBy,
       logoutAdminName: e.logoutAdminName || record.logoutAdminName,
     })).sort(
@@ -395,9 +403,10 @@ export function AttendancePage() {
     const byUser = new Map<string, EmployeeMonthSummary>();
     for (const record of records) {
       const existing = byUser.get(record.userId);
+      const hasRealSelfie = Boolean(record.selfieUrl) && record.selfieUrl!.length > 30;
       if (existing) {
         existing.records.push(record);
-        if (!existing.latestSelfie && record.selfieUrl) {
+        if ((!existing.latestSelfie || existing.latestSelfie.length < 30) && hasRealSelfie) {
           existing.latestSelfie = record.selfieUrl;
         }
         continue;
@@ -416,7 +425,7 @@ export function AttendancePage() {
         logoutCount: 0,
         latestLogin: record.loginTime,
         latestLogout: record.logoutTime,
-        latestSelfie: record.selfieUrl,
+        latestSelfie: hasRealSelfie ? record.selfieUrl : undefined,
       });
     }
 
@@ -424,7 +433,12 @@ export function AttendancePage() {
       .map((employee) => {
         const allEvents = employee.records.flatMap(getLoginEvents);
         const logoutEvents = allEvents.filter(
-          (e) => Boolean(e.logoutTime) && String(e.logoutTime).toLowerCase() !== 'invalid date'
+          (e) => {
+            if (!e.logoutTime || String(e.logoutTime).toLowerCase() === 'invalid date') return false;
+            const logD = parseToValidDate(e.loginTime, employee.records[0]?.date);
+            const outD = parseToValidDate(e.logoutTime, employee.records[0]?.date);
+            return !logD || !outD || Math.abs(outD.getTime() - logD.getTime()) > 3000;
+          }
         );
         const latestLogout = logoutEvents.reduce(
           (latest, event) => {
@@ -436,8 +450,14 @@ export function AttendancePage() {
           undefined as string | undefined
         );
 
+        // Find the most recent non-empty real camera selfie from any record
+        const bestSelfie = employee.records.find(
+          (r) => Boolean(r.selfieUrl) && r.selfieUrl!.length > 30
+        )?.selfieUrl;
+
         return {
           ...employee,
+          latestSelfie: bestSelfie || employee.latestSelfie,
           daysPresent: new Set(employee.records.map((record) => record.date)).size,
           loginCount: allEvents.length,
           logoutCount: logoutEvents.length,
@@ -450,7 +470,11 @@ export function AttendancePage() {
             allEvents[0]?.loginTime || employee.latestLogin
           ),
           latestLogout,
-          records: employee.records.sort((a, b) => (b.date || '').localeCompare(a.date || '')),
+          records: employee.records.sort((a, b) => {
+            const timeA = parseToValidDate(a.loginTime, a.date)?.getTime() || 0;
+            const timeB = parseToValidDate(b.loginTime, b.date)?.getTime() || 0;
+            return timeB - timeA;
+          }),
         };
       })
       .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
@@ -810,7 +834,7 @@ export function AttendancePage() {
                               }
                             }}
                           >
-                            {record.selfieUrl ? (
+                            {record.selfieUrl && record.selfieUrl.length > 20 && !record.selfieUrl.includes('image/svg+xml') ? (
                               <div
                                 className="group/selfie relative h-11 w-11 cursor-pointer overflow-hidden rounded-xl border-2 border-emerald-500 shadow-sm transition-transform hover:scale-105"
                                 title="Click to view full punch selfie"
@@ -820,6 +844,9 @@ export function AttendancePage() {
                                   alt={record.userName}
                                   className="h-full w-full object-cover"
                                   loading="lazy"
+                                  onError={(e) => {
+                                    (e.target as HTMLElement).style.display = 'none';
+                                  }}
                                 />
                                 <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover/selfie:opacity-100 transition-opacity">
                                   <Camera className="h-4 w-4 text-white" />
@@ -875,7 +902,13 @@ export function AttendancePage() {
 
                       {/* Logout Timing & Away Duration Timer */}
                       <td className="px-4 py-3.5 whitespace-nowrap">
-                        {record.logoutTime && String(record.logoutTime).toLowerCase() !== 'invalid date' ? (
+                        {record.logoutTime &&
+                        String(record.logoutTime).toLowerCase() !== 'invalid date' &&
+                        (() => {
+                          const logD = parseToValidDate(record.loginTime, record.date);
+                          const outD = parseToValidDate(record.logoutTime, record.date);
+                          return !logD || !outD || Math.abs(outD.getTime() - logD.getTime()) > 3000;
+                        })() ? (
                           <div className="flex flex-col gap-1 items-start">
                             <div className="inline-flex items-center gap-1.5 font-mono font-bold text-xs text-amber-900 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200/80 shadow-2xs">
                               <LogOut className="h-3.5 w-3.5 text-amber-600 shrink-0" />
@@ -1332,7 +1365,7 @@ export function AttendancePage() {
                       </div>
 
                       {/* Selfie & Location Card */}
-                      {record.selfieUrl && (
+                      {record.selfieUrl && record.selfieUrl.length > 20 && !record.selfieUrl.includes('image/svg+xml') && (
                         <div className="border-b border-neutral-100 p-4 bg-gradient-to-r from-emerald-50/40 to-blue-50/30 flex items-center gap-3.5">
                           <div
                             onClick={() =>
@@ -1350,6 +1383,9 @@ export function AttendancePage() {
                               src={record.selfieUrl}
                               alt="Punch Selfie"
                               className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                              onError={(e) => {
+                                (e.target as HTMLElement).style.display = 'none';
+                              }}
                             />
                             <div className="absolute inset-0 bg-black/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                               <Camera className="h-4 w-4 text-white" />
@@ -1384,11 +1420,20 @@ export function AttendancePage() {
                       {/* Login and Logout Event Cards */}
                       <div className="divide-y divide-neutral-100 p-3 space-y-3">
                         {events.map((event, index) => {
-                          const duration = formatDuration(event.loginTime, event.logoutTime, record.date);
+                          const isSameAsLogin = (() => {
+                            if (!event.logoutTime) return false;
+                            const logD = parseToValidDate(event.loginTime, record.date);
+                            const outD = parseToValidDate(event.logoutTime, record.date);
+                            return Boolean(logD && outD && Math.abs(outD.getTime() - logD.getTime()) <= 3000);
+                          })();
+
                           const hasLogout =
                             Boolean(event.logoutTime) &&
                             String(event.logoutTime).toLowerCase() !== 'null' &&
-                            String(event.logoutTime).toLowerCase() !== 'invalid date';
+                            String(event.logoutTime).toLowerCase() !== 'invalid date' &&
+                            !isSameAsLogin;
+
+                          const duration = hasLogout ? formatDuration(event.loginTime, event.logoutTime, record.date) : 'Currently Active';
 
                           return (
                             <div
