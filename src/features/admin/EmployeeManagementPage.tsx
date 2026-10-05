@@ -34,6 +34,7 @@ import {
   LogOut,
   Plus,
   Eye,
+  EyeOff,
 } from 'lucide-react';
 
 import { Link, useNavigate } from 'react-router-dom';
@@ -74,6 +75,7 @@ export function EmployeeManagementPage() {
   const [isAddingCustomRole, setIsAddingCustomRole] = useState(false);
   const [customRoleInput, setCustomRoleInput] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
   const [department, setDepartment] = useState('Sales');
   const [departments, setDepartments] = useState<string[]>(DEFAULT_DEPARTMENTS);
   const [isAddingNewDept, setIsAddingNewDept] = useState(false);
@@ -1262,19 +1264,37 @@ export function EmployeeManagementPage() {
               </label>
               <button
                 type="button"
-                onClick={() => setNewPassword(`Advmen${Math.floor(1000 + Math.random() * 9000)}!`)}
-                className="text-[11px] text-blue-600 hover:text-blue-800 font-semibold"
+                onClick={() => {
+                  setNewPassword(`Advmen${Math.floor(1000 + Math.random() * 9000)}!`);
+                  setShowNewPassword(true);
+                }}
+                className="text-[11px] text-blue-600 hover:text-blue-800 font-semibold cursor-pointer"
               >
                 Auto-generate
               </button>
             </div>
-            <input
-              type="password"
-              required
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              className="w-full px-3.5 py-2.5 rounded-xl border border-neutral-300 text-xs focus:outline-none focus:border-blue-500 font-mono"
-            />
+            <div className="relative">
+              <input
+                type={showNewPassword ? 'text' : 'password'}
+                required
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="Enter password or auto-generate"
+                className="w-full pl-3.5 pr-10 py-2.5 rounded-xl border border-neutral-300 text-xs focus:outline-none focus:border-blue-500 font-mono transition-colors"
+              />
+              <button
+                type="button"
+                onClick={() => setShowNewPassword((prev) => !prev)}
+                className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-neutral-400 hover:text-neutral-700 transition-colors focus:outline-none cursor-pointer"
+                title={showNewPassword ? 'Hide password' : 'Show password'}
+              >
+                {showNewPassword ? (
+                  <EyeOff className="w-4 h-4 text-neutral-600" />
+                ) : (
+                  <Eye className="w-4 h-4 text-neutral-400" />
+                )}
+              </button>
+            </div>
           </div>
 
           <div className="pt-3 border-t border-neutral-200 flex justify-end gap-3">
