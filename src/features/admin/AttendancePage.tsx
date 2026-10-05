@@ -450,10 +450,10 @@ export function AttendancePage() {
             allEvents[0]?.loginTime || employee.latestLogin
           ),
           latestLogout,
-          records: employee.records.sort((a, b) => b.date.localeCompare(a.date)),
+          records: employee.records.sort((a, b) => (b.date || '').localeCompare(a.date || '')),
         };
       })
-      .sort((a, b) => a.name.localeCompare(b.name));
+      .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
   }, [records]);
 
   // Filtered punch records for the live feed
@@ -508,7 +508,7 @@ export function AttendancePage() {
           phone: rec.userPhone,
           department: rec.department,
           role: rec.role,
-          records: userRecords.sort((a, b) => b.date.localeCompare(a.date)),
+          records: userRecords.sort((a, b) => (b.date || '').localeCompare(a.date || '')),
           daysPresent: new Set(userRecords.map((r) => r.date)).size || 1,
           loginCount: allEvents.length || 1,
           logoutCount: logoutEvents.length,
