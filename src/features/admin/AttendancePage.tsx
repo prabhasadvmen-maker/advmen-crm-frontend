@@ -26,6 +26,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { useUIStore } from '@/stores/uiStore';
+import { getSocketClient } from '@/lib/socketClient';
 
 
 interface EmployeeMonthSummary {
@@ -235,6 +236,28 @@ function formatDuration(loginTime: string, logoutTime?: string, fallbackDateStr?
   const minutes = totalMinutes % 60;
   if (hours === 0) return `${minutes} min${minutes > 1 ? 's' : ''}`;
   return `${hours} hr${hours > 1 ? 's' : ''} ${minutes} min${minutes > 1 ? 's' : ''}`;
+}
+
+function LiveAwayTimer({ startTime }: { startTime?: any }) {
+  const [seconds, setSeconds] = useState(0);
+
+  useEffect(() => {
+    if (!startTime) return;
+    const startMs = parseToValidDate(startTime)?.getTime() || new Date(startTime).getTime();
+    if (isNaN(startMs)) return;
+
+    const tick = () => {
+      const diff = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
+      setSeconds(diff);
+    };
+    tick();
+    const timer = setInterval(tick, 1000);
+    return () => clearInterval(timer);
+  }, [startTime]);
+
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return <span>{`${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`}</span>;
 }
 
 export function AttendancePage() {
@@ -851,7 +874,7 @@ export function AttendancePage() {
                         </div>
                       </td>
 
-                      {/* Logout Timing */}
+                      {/* Logout Timing & Away Duration Timer */}
                       <td className="px-4 py-3.5 whitespace-nowrap">
                         {record.logoutTime && String(record.logoutTime).toLowerCase() !== 'invalid date' ? (
                           <div className="flex flex-col gap-1 items-start">
@@ -860,13 +883,24 @@ export function AttendancePage() {
                               <span>{formatExactTime(record.logoutTime, record.date)}</span>
                             </div>
                             {record.logoutBy === 'ADMIN' ? (
-                              <span
-                                className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-200 font-mono shadow-2xs"
-                                title={`Remotely punched out by ${record.logoutAdminName || 'Admin'}`}
-                              >
-                                <Shield className="w-3 h-3 text-rose-600 shrink-0" />
-                                <span>Admin {record.logoutAdminName ? `(${record.logoutAdminName})` : ''}</span>
-                              </span>
+                              <div className="flex flex-col gap-1 items-start">
+                                <span
+                                  className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-200 font-mono shadow-2xs"
+                                  title={`Remotely punched out by ${record.adminLogoutBy || record.logoutAdminName || 'Admin'}`}
+                                >
+                                  <Shield className="w-3 h-3 text-rose-600 shrink-0" />
+                                  <span>Admin {record.adminLogoutBy || record.logoutAdminName ? `(${record.adminLogoutBy || record.logoutAdminName})` : ''}</span>
+                                </span>
+                                {(record.isAwayPending || !record.adminLogoutReLoginAt) && (
+                                  <span
+                                    className="inline-flex items-center gap-1.5 text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-300 font-mono animate-pulse"
+                                    title="Timer active: calculating time until employee logs in again"
+                                  >
+                                    <Clock className="w-3 h-3 text-amber-700 animate-spin" />
+                                    <span>Away: <LiveAwayTimer startTime={record.adminLogoutAt || record.logoutTime} /></span>
+                                  </span>
+                                )}
+                              </div>
                             ) : (
                               <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200 font-mono shadow-2xs">
                                 <User className="w-3 h-3 text-blue-600 shrink-0" />
@@ -875,28 +909,39 @@ export function AttendancePage() {
                             )}
                           </div>
                         ) : (
-                          <div className="flex items-center gap-2">
-                            <span className="inline-flex items-center gap-1.5 font-semibold text-xs text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
-                              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                              <span>Active</span>
-                            </span>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleForceLogout(record);
-                              }}
-                              disabled={loggingOutUserId === record.userId}
-                              className="px-2.5 py-1 text-xs font-bold rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 transition shadow-2xs flex items-center gap-1 cursor-pointer disabled:opacity-50"
-                              title="Remotely logout employee & record attendance punch-out as Admin"
-                            >
-                              {loggingOutUserId === record.userId ? (
-                                <RefreshCw className="w-3.5 h-3.5 animate-spin text-rose-600" />
-                              ) : (
-                                <LogOut className="w-3.5 h-3.5 text-rose-600" />
-                              )}
-                              <span>Logout</span>
-                            </button>
+                          <div className="flex flex-col gap-1 items-start">
+                            <div className="flex items-center gap-2">
+                              <span className="inline-flex items-center gap-1.5 font-semibold text-xs text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
+                                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                                <span>Active</span>
+                              </span>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleForceLogout(record);
+                                }}
+                                disabled={loggingOutUserId === record.userId}
+                                className="px-2.5 py-1 text-xs font-bold rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 transition shadow-2xs flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                                title="Remotely logout employee & record attendance punch-out as Admin"
+                              >
+                                {loggingOutUserId === record.userId ? (
+                                  <RefreshCw className="w-3.5 h-3.5 animate-spin text-rose-600" />
+                                ) : (
+                                  <LogOut className="w-3.5 h-3.5 text-rose-600" />
+                                )}
+                                <span>Logout</span>
+                              </button>
+                            </div>
+                            {Boolean(record.totalAwayDurationSeconds || record.awayDurationFormatted) && (
+                              <span
+                                className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-50 text-amber-900 border border-amber-300 font-mono shadow-2xs"
+                                title={`Total away duration recorded during Admin Logout: ${record.awayDurationFormatted}`}
+                              >
+                                <Clock className="w-3 h-3 text-amber-600" />
+                                <span>Away Time: {record.awayDurationFormatted}</span>
+                              </span>
+                            )}
                           </div>
                         )}
                       </td>
@@ -1425,6 +1470,32 @@ export function AttendancePage() {
                                           </span>
                                         )}
                                       </div>
+                                      {/* Away / Admin Logout Duration Detail */}
+                                      {event.logoutBy === 'ADMIN' && (
+                                        <div className="mt-2.5 p-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-950 text-xs space-y-1">
+                                          <div className="flex items-center justify-between">
+                                            <span className="font-bold flex items-center gap-1 text-amber-900">
+                                              <Clock className="w-3.5 h-3.5 text-amber-600" />
+                                              <span>Away / Logout Duration:</span>
+                                            </span>
+                                            {event.awayDurationFormatted ? (
+                                              <span className="font-mono font-black text-amber-950 bg-amber-100 px-2 py-0.5 rounded border border-amber-300">
+                                                ⏱️ {event.awayDurationFormatted}
+                                              </span>
+                                            ) : (
+                                              <span className="font-mono font-black text-rose-900 bg-rose-100 px-2 py-0.5 rounded border border-rose-300 animate-pulse">
+                                                ⏱️ <LiveAwayTimer startTime={event.logoutTime} />
+                                              </span>
+                                            )}
+                                          </div>
+                                          {event.reLoginTime && (
+                                            <div className="text-[11px] text-amber-800 flex items-center justify-between pt-1 border-t border-amber-200/60 font-medium">
+                                              <span>Re-login Check-in:</span>
+                                              <span className="font-mono">{formatDateTime(event.reLoginTime, record.date)}</span>
+                                            </div>
+                                          )}
+                                        </div>
+                                      )}
                                     </>
                                   ) : (
                                     <div className="mt-1 flex items-center justify-between">
