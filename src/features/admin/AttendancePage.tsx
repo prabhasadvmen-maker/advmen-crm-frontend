@@ -478,13 +478,13 @@ export function AttendancePage() {
       }
       const rec = record as AttendanceRecord;
       const found = employees.find(
-        (e) => e.userId === rec.userId || (rec.userName && e.name.toLowerCase() === rec.userName.toLowerCase())
+        (e) => e.userId === rec.userId || (rec.userName && (e.name || '').toLowerCase() === rec.userName.toLowerCase())
       );
       if (found) {
         setSelectedEmployee(found);
       } else {
         const userRecords = records.filter(
-          (r) => r.userId === rec.userId || (rec.userName && r.userName.toLowerCase() === rec.userName.toLowerCase())
+          (r) => r.userId === rec.userId || (rec.userName && (r.userName || '').toLowerCase() === rec.userName.toLowerCase())
         );
         const allEvents = userRecords.flatMap(getLoginEvents);
         const logoutEvents = allEvents.filter(
@@ -1090,7 +1090,7 @@ export function AttendancePage() {
                             <div className="font-semibold text-neutral-900">{employee.name}</div>
                             <div className="text-xs text-neutral-500">
                               <span className="font-mono text-blue-600 font-semibold">{employee.employeeId || 'EMP'}</span> ·{' '}
-                              {employee.role.replace(/_/g, ' ')}
+                              {(employee.role || '').replace(/_/g, ' ')}
                             </div>
                           </div>
                         </div>
@@ -1150,7 +1150,7 @@ export function AttendancePage() {
         badge={
           selectedEmployee ? (
             <span className="rounded-full bg-blue-50 px-2 py-1 text-[10px] font-semibold uppercase text-blue-700">
-              {selectedEmployee.role.replace(/_/g, ' ')}
+              {(selectedEmployee.role || '').replace(/_/g, ' ')}
             </span>
           ) : undefined
         }
