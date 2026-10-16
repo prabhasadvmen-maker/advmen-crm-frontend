@@ -53,7 +53,7 @@ export function NetworkStatusNotifier() {
         setRetryResult('success');
         addToast({
           type: 'success',
-          title: 'Connected (सर्वर से कनेक्शन जुड़ गया)',
+          title: 'Connected to server',
           message: 'Backend server and internet are working properly.',
           durationMs: 4000,
         });

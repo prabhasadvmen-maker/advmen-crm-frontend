@@ -636,8 +636,8 @@ export function AttendancePage() {
       }
       byUser.set(record.userId, {
         userId: record.userId,
-        employeeId: record.employeeId,
-        name: record.userName,
+        employeeId: record.employeeId || (record as any).empId || 'EMP',
+        name: record.userName || (record as any).empName || (record as any).name || 'Employee',
         email: record.userEmail,
         phone: record.userPhone,
         department: record.department,
@@ -765,8 +765,8 @@ export function AttendancePage() {
 
       const matchesSearch =
         !searchQuery.trim() ||
-        (r.userName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (r.employeeId || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (r.userName || (r as any).empName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (r.employeeId || (r as any).empId || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
         (r.location?.address || '').toLowerCase().includes(searchQuery.toLowerCase());
 
       const matchesStatus = statusFilter === 'ALL' || r.status === statusFilter;
@@ -1253,8 +1253,8 @@ export function AttendancePage() {
                       <td className="px-4 py-3.5">
                         <div className="flex items-center gap-3">
                           <EmployeeAvatarBadge
-                            name={record.userName}
-                            employeeId={record.employeeId}
+                            name={record.userName || (record as any).empName || (record as any).name || 'Employee'}
+                            employeeId={record.employeeId || (record as any).empId || 'EMP'}
                             userId={record.userId}
                             avatarUrl={systemUsers.find((u) => u.id === record.userId)?.avatarUrl}
                             selfieUrl={record.selfieUrl}
@@ -1264,7 +1264,7 @@ export function AttendancePage() {
                               if (record.selfieUrl && record.selfieUrl.length > 10) {
                                 setPreviewSelfie({
                                   url: resolveSelfieUrl(record.selfieUrl),
-                                  name: record.userName,
+                                  name: record.userName || (record as any).empName || (record as any).name || 'Employee',
                                   time: formatDateTime(record.loginTime, record.date),
                                   location: record.location?.address,
                                 });
@@ -1274,14 +1274,14 @@ export function AttendancePage() {
 
                           <div className="min-w-0">
                             <div className="font-bold text-neutral-900 group-hover:text-blue-600 transition-colors flex items-center gap-1.5 truncate">
-                              <span className="truncate text-sm">{record.userName}</span>
+                              <span className="truncate text-sm">{record.userName || (record as any).empName || (record as any).name || 'Employee'}</span>
                               <span className="text-[10px] text-blue-600 font-semibold opacity-0 group-hover:opacity-100 transition-opacity">
                                 ↗
                               </span>
                             </div>
                             <div className="flex items-center gap-1.5 text-xs text-neutral-500 mt-0.5">
                               <span className="font-mono font-bold text-emerald-800 bg-emerald-50 border border-emerald-200/80 px-1.5 py-0.5 rounded text-[11px]">
-                                {record.employeeId || 'EMP'}
+                                {record.employeeId || (record as any).empId || 'EMP'}
                               </span>
                               <span className="text-neutral-300">·</span>
                               <span className="truncate text-[11px] text-neutral-600 font-medium">
@@ -1294,15 +1294,28 @@ export function AttendancePage() {
 
                       {/* Punch Date */}
                       <td className="px-4 py-3.5 whitespace-nowrap">
-                        <div className="font-bold text-neutral-900 text-xs">
-                          {new Date(`${record.date}T12:00:00Z`).toLocaleDateString('en-IN', {
+                        {(() => {
+                          const dateStr = record.date || (record.loginTime ? String(record.loginTime).slice(0, 10) : '');
+                          let d = dateStr ? new Date(`${dateStr}T12:00:00Z`) : null;
+                          if (!d || isNaN(d.getTime())) {
+                            d = record.loginTime ? new Date(record.loginTime) : new Date();
+                          }
+                          const displayDate = !isNaN(d.getTime()) ? d.toLocaleDateString('en-IN', {
                             day: 'numeric',
                             month: 'short',
                             year: 'numeric',
                             timeZone: 'Asia/Kolkata',
-                          })}
-                        </div>
-                        <div className="text-[10px] font-mono text-neutral-400 mt-0.5">{record.date}</div>
+                          }) : '16 Oct 2026';
+                          const subDate = dateStr || (d && !isNaN(d.getTime()) ? d.toISOString().slice(0, 10) : '2026-10-16');
+                          return (
+                            <>
+                              <div className="font-bold text-neutral-900 text-xs">
+                                {displayDate}
+                              </div>
+                              <div className="text-[10px] font-mono text-neutral-400 mt-0.5">{subDate}</div>
+                            </>
+                          );
+                        })()}
                       </td>
 
                       {/* Login Timing */}
