@@ -31,6 +31,7 @@ import { useUIStore } from '@/stores/uiStore';
 import { EmployeeMonthlyHistoryView } from './EmployeeMonthlyHistoryView';
 import { WorkReportsTableView } from '../reports/WorkReportsTableView';
 import { usersApi, UserDto } from './api/usersApi';
+import { getSocketClient } from '@/lib/socketClient';
 
 
 interface EmployeeMonthSummary {
@@ -506,6 +507,25 @@ export function AttendancePage() {
 
   useEffect(() => {
     void loadAttendance();
+  }, [loadAttendance]);
+
+  useEffect(() => {
+    try {
+      const socket = getSocketClient();
+      const onAttendanceEvent = () => {
+        void loadAttendance();
+      };
+      socket.on('attendance:punchin', onAttendanceEvent);
+      socket.on('attendance:updated', onAttendanceEvent);
+      socket.on('attendance:login', onAttendanceEvent);
+      return () => {
+        socket.off('attendance:punchin', onAttendanceEvent);
+        socket.off('attendance:updated', onAttendanceEvent);
+        socket.off('attendance:login', onAttendanceEvent);
+      };
+    } catch {
+      // ignore
+    }
   }, [loadAttendance]);
 
   useEffect(() => {

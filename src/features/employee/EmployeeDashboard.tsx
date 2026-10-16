@@ -1,10 +1,13 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { KPICard } from '@/components/patterns/KPICard';
 import { WidgetBoundary } from '@/components/system/WidgetBoundary';
 import { Button } from '@/components/ui/Button';
 import { Avatar } from '@/components/ui/Avatar';
 import { useSessionStore } from '@/stores/sessionStore';
+import { useUIStore } from '@/stores/uiStore';
+import { apiClient } from '@/lib/apiClient';
+import { attendanceApi, AttendanceRecord } from '@/features/admin/api/attendanceApi';
 import { useLeads } from '@/features/leads/hooks/useLeads';
 import { useDeals } from '@/features/deals/hooks/useDeals';
 import { useCalls } from '@/features/calls/hooks/useCalls';
@@ -21,11 +24,14 @@ import {
   CheckCircle2,
   Briefcase,
   HelpCircle,
+  LogIn,
+  LogOut,
 } from 'lucide-react';
 
 export function EmployeeDashboard() {
   const navigate = useNavigate();
   const { user, organizationName } = useSessionStore();
+  const { addToast } = useUIStore();
   const canViewDeals = user.permissions.includes('deal.view');
 
   const { leads = [] } = useLeads();
@@ -35,6 +41,105 @@ export function EmployeeDashboard() {
 
   const [activeTab, setActiveTab] = useState<'deals' | 'tasks' | 'calls'>('deals');
   const [taskStatusFilter, setTaskStatusFilter] = useState<'ALL' | 'PENDING' | 'COMPLETED'>('ALL');
+
+  const [todayAttendance, setTodayAttendance] = useState<AttendanceRecord | null>(null);
+  const [isPunchingIn, setIsPunchingIn] = useState(false);
+  const [isPunchingOut, setIsPunchingOut] = useState(false);
+
+  const fetchTodayAttendance = useCallback(async () => {
+    try {
+      const res = await apiClient.get<{ history: AttendanceRecord[] }>('/attendance/my?limit=1');
+      if (res.history && res.history.length > 0) {
+        const todayStr = new Intl.DateTimeFormat('en-CA', {
+          timeZone: 'Asia/Kolkata',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+        }).format(new Date());
+
+        const latest = res.history[0];
+        if (latest.date === todayStr || (latest.loginTime && latest.loginTime.startsWith(todayStr))) {
+          setTodayAttendance(latest);
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchTodayAttendance();
+  }, [fetchTodayAttendance]);
+
+  const handlePunchIn = async () => {
+    setIsPunchingIn(true);
+    try {
+      let location: any = undefined;
+      try {
+        if ('geolocation' in navigator) {
+          const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, {
+              timeout: 6000,
+              enableHighAccuracy: true,
+            });
+          });
+          location = {
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+            accuracy: pos.coords.accuracy,
+            address: `GPS: ${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)}`,
+            googleMapsUrl: `https://www.google.com/maps?q=${pos.coords.latitude},${pos.coords.longitude}`,
+          };
+        }
+      } catch {
+        // Location is optional
+      }
+
+      const res = await attendanceApi.punchIn({ location });
+      if (res.record) {
+        setTodayAttendance(res.record);
+      }
+      addToast({
+        type: 'success',
+        title: 'Punch-In Successful!',
+        message: 'Your shift attendance is recorded in the system.',
+      });
+    } catch (err: any) {
+      addToast({
+        type: 'danger',
+        title: 'Punch-In Failed',
+        message: err.response?.data?.message || err.message || 'Failed to punch in',
+      });
+    } finally {
+      setIsPunchingIn(false);
+    }
+  };
+
+  const handlePunchOut = async () => {
+    if (!window.confirm('Are you sure you want to Punch Out now? Your work session for today will be recorded.')) {
+      return;
+    }
+    setIsPunchingOut(true);
+    try {
+      const res = await attendanceApi.punchOut();
+      if (res.record) {
+        setTodayAttendance(res.record);
+      }
+      addToast({
+        type: 'success',
+        title: 'Punch-Out Recorded',
+        message: 'Have a great evening!',
+      });
+    } catch (err: any) {
+      addToast({
+        type: 'danger',
+        title: 'Punch-Out Failed',
+        message: err.response?.data?.message || err.message || 'Failed to punch out',
+      });
+    } finally {
+      setIsPunchingOut(false);
+    }
+  };
 
   useEffect(() => {
     if (!canViewDeals && activeTab === 'deals') {
@@ -138,6 +243,80 @@ export function EmployeeDashboard() {
               onClick={() => navigate('/pipeline')}
             >
               My Deals Pipeline
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Attendance & Punch-In Bar */}
+      <div className="bg-white rounded-2xl border border-neutral-200 p-4 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className={`p-2.5 rounded-xl flex items-center justify-center shrink-0 ${
+            todayAttendance && !todayAttendance.logoutTime
+              ? 'bg-emerald-50 text-emerald-600 border border-emerald-200'
+              : 'bg-amber-50 text-amber-600 border border-amber-200'
+          }`}>
+            <Clock className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold uppercase tracking-wider text-neutral-500">
+                Daily Attendance & Shift
+              </span>
+              {todayAttendance && !todayAttendance.logoutTime ? (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-1 font-mono">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  ACTIVE / PUNCHED IN
+                </span>
+              ) : todayAttendance && todayAttendance.logoutTime ? (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-neutral-100 text-neutral-700 border border-neutral-200 font-mono">
+                  PUNCHED OUT
+                </span>
+              ) : (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200 font-mono">
+                  NOT PUNCHED IN
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-neutral-700 mt-0.5 font-medium">
+              {todayAttendance ? (
+                <span>
+                  Arrival: <strong className="text-emerald-700">{new Date(todayAttendance.loginTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}</strong>
+                  {todayAttendance.logoutTime && (
+                    <span> • Departure: <strong className="text-rose-700">{new Date(todayAttendance.logoutTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}</strong></span>
+                  )}
+                  {todayAttendance.location?.address && (
+                    <span className="hidden md:inline text-neutral-400"> • {todayAttendance.location.address}</span>
+                  )}
+                </span>
+              ) : (
+                <span>Please mark your daily punch-in to record your shift in the company attendance log.</span>
+              )}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          {(!todayAttendance || todayAttendance.logoutTime) ? (
+            <Button
+              size="sm"
+              variant="primary"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+              icon={<LogIn className="w-4 h-4" />}
+              isLoading={isPunchingIn}
+              onClick={handlePunchIn}
+            >
+              Punch In (Check-In)
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              variant="danger"
+              icon={<LogOut className="w-4 h-4" />}
+              isLoading={isPunchingOut}
+              onClick={handlePunchOut}
+            >
+              Punch Out (Departure)
             </Button>
           )}
         </div>

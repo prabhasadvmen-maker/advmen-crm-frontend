@@ -310,6 +310,26 @@ export const attendanceApi = {
     return apiClient.delete<{ success: boolean; message: string; deletedCount: number }>('/attendance/clear-all');
   },
 
+  punchIn: (data?: {
+    selfieUrl?: string;
+    selfie?: string;
+    selfieData?: string;
+    location?: {
+      address?: string;
+      lat?: number;
+      lng?: number;
+      accuracy?: number;
+      googleMapsUrl?: string;
+    };
+    notes?: string;
+  }): Promise<{ success: boolean; message: string; record: AttendanceRecord }> => {
+    return apiClient.post<{ success: boolean; message: string; record: AttendanceRecord }>('/attendance/punch-in', data || {});
+  },
+
+  punchOut: (data?: any): Promise<{ success: boolean; message: string; record: AttendanceRecord }> => {
+    return apiClient.post<{ success: boolean; message: string; record: AttendanceRecord }>('/attendance/punch-out', data || {});
+  },
+
   // Lunch Break Actions
   startLunch: (notes?: string, userId?: string): Promise<{ success: boolean; message: string; record: AttendanceRecord }> => {
     return apiClient.post<{ success: boolean; message: string; record: AttendanceRecord }>('/attendance/lunch/start', {
