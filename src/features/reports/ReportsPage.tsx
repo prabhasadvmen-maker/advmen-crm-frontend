@@ -81,7 +81,7 @@ export function ReportsPage() {
       <div className="pb-fib-8 border-b border-neutral-200 flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-extrabold text-neutral-900 tracking-tight">
-            Reports & Analytics Hub (रिपोर्ट प्रबंधन)
+            Reports & Analytics Hub
           </h1>
           <p className="text-xs text-neutral-500 mt-0.5">
             Database 'reports' collection — live punchout work reports, team logs, and pipeline analytics.
@@ -100,7 +100,7 @@ export function ReportsPage() {
             }`}
           >
             <FileText className="w-3.5 h-3.5 text-indigo-600" />
-            <span>Employee Work Reports (कार्य रिपोर्ट)</span>
+            <span>Employee Work Reports</span>
           </button>
 
           <button

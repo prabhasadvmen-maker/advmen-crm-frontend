@@ -82,8 +82,8 @@ export function NetworkStatusNotifier() {
       setNetworkAlert(null);
       addToast({
         type: 'success',
-        title: 'Internet Restored (इंटरनेट चालू हो गया)',
-        message: 'Internet connection wapas jud gaya hai.',
+        title: 'Internet Restored',
+        message: 'Internet connection has been re-established.',
         durationMs: 4000,
       });
 
@@ -97,14 +97,14 @@ export function NetworkStatusNotifier() {
       setIsOnline(false);
       setShowRestored(false);
       setNetworkAlert({
-        message: 'Aap offline hain. Kripya apna Wi-Fi ya mobile data connection check karein.',
+        message: 'You are offline. Please check your Wi-Fi or network connection.',
         details: 'Device Offline',
         isOffline: true,
       });
       addToast({
         type: 'danger',
-        title: 'Network Disconnected (इंटरनेट बंद है)',
-        message: 'Aap offline hain. Kripya apna Wi-Fi ya mobile data connection check karein.',
+        title: 'Network Disconnected',
+        message: 'You are offline. Please check your Wi-Fi or network connection.',
         durationMs: 6000,
       });
     };
@@ -112,7 +112,7 @@ export function NetworkStatusNotifier() {
     const handleCustomNetworkIssue = (e: Event) => {
       const detail = (e as CustomEvent).detail || {};
       setNetworkAlert({
-        message: detail.message || 'Server ya internet se connection toot gaya hai.',
+        message: detail.message || 'Connection to server or internet was interrupted.',
         details: detail.details || 'Connection Error',
         isOffline: detail.isOffline ?? !navigator.onLine,
       });
@@ -144,10 +144,10 @@ export function NetworkStatusNotifier() {
           <div className="flex items-center gap-2.5 max-w-7xl mx-auto w-full">
             <WifiOff className="w-4 h-4 animate-pulse shrink-0 text-white" />
             <span className="font-bold tracking-tight">
-              Network Offline (इंटरनेट बंद है):
+              Network Offline:
             </span>
             <span className="opacity-95 text-[11px] sm:text-xs">
-              Aapka device offline hai. Data sync karne ke liye internet connection check karein.
+              Your device is currently offline. Please check your internet connection to sync data.
             </span>
           </div>
         </aside>
@@ -163,7 +163,7 @@ export function NetworkStatusNotifier() {
           <div className="flex items-center gap-2 max-w-7xl mx-auto w-full">
             <Wifi className="w-4 h-4 shrink-0 text-white" />
             <span className="font-bold">
-              Back Online (इंटरनेट चालू हो गया):
+              Back Online:
             </span>
             <span className="opacity-95 text-[11px] sm:text-xs">
               Internet connection successfully re-established.
@@ -192,7 +192,7 @@ export function NetworkStatusNotifier() {
                 </span>
                 <span className="font-bold text-xs uppercase tracking-wider text-rose-300 flex items-center gap-1.5">
                   <WifiOff className="w-3.5 h-3.5 text-rose-400" />
-                  Network Issue (नेटवर्क समस्या)
+                  Network Connection Issue
                 </span>
               </div>
               <button
@@ -222,13 +222,13 @@ export function NetworkStatusNotifier() {
             {retryResult === 'success' && (
               <div className="flex items-center gap-1.5 text-emerald-400 text-[11px] font-semibold bg-emerald-950/60 border border-emerald-500/40 px-2.5 py-1.5 rounded-lg animate-in fade-in">
                 <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-                <span>Connection safal! Server jud gaya hai.</span>
+                <span>Connection established successfully!</span>
               </div>
             )}
             {retryResult === 'failed' && (
               <div className="flex items-center gap-1.5 text-rose-300 text-[11px] font-medium bg-rose-950/60 border border-rose-500/40 px-2.5 py-1.5 rounded-lg animate-in fade-in">
                 <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-rose-400" />
-                <span>Abhi bhi connect nahi ho pa raha hai. Thoda ruk kar check karein.</span>
+                <span>Unable to connect. Please check your connection and try again.</span>
               </div>
             )}
 
@@ -241,7 +241,7 @@ export function NetworkStatusNotifier() {
                 className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-semibold text-xs transition-colors shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${isRetrying ? 'animate-spin' : ''}`} />
-                <span>{isRetrying ? 'Checking...' : 'Retry Connection (चेक करें)'}</span>
+                <span>{isRetrying ? 'Checking...' : 'Retry Connection'}</span>
               </button>
               <button
                 type="button"

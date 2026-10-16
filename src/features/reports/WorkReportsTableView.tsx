@@ -148,7 +148,7 @@ export function WorkReportsTableView() {
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-indigo-900 flex items-center gap-1.5">
               <FileText className="w-4 h-4 text-indigo-600" />
-              <span>Total Reports (कुल रिपोर्ट)</span>
+              <span>Total Reports</span>
             </span>
             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-200 text-indigo-900">
               Database 'reports'
@@ -165,7 +165,7 @@ export function WorkReportsTableView() {
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-emerald-900 flex items-center gap-1.5">
               <Calendar className="w-4 h-4 text-emerald-600" />
-              <span>Today's Reports (आज की रिपोर्ट)</span>
+              <span>Today's Reports</span>
             </span>
             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-200 text-emerald-900">
               Live Today
@@ -182,7 +182,7 @@ export function WorkReportsTableView() {
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-blue-900 flex items-center gap-1.5">
               <User className="w-4 h-4 text-blue-600" />
-              <span>Active Reporters (कर्मचारी)</span>
+              <span>Active Reporters</span>
             </span>
             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-200 text-blue-900">
               Distinct Staff
@@ -597,7 +597,7 @@ export function WorkReportsTableView() {
             {/* Work Report Text */}
             <div className="space-y-1.5">
               <label className="text-xs font-bold uppercase tracking-wider text-neutral-700 block">
-                Work Summary & Tasks Completed (कार्य विवरण)
+                Work Summary & Tasks Completed
               </label>
               <div className="rounded-xl border border-neutral-200 bg-neutral-50/50 p-4 text-xs text-neutral-800 whitespace-pre-wrap leading-relaxed font-medium">
                 {selectedReport.workReport}
@@ -750,9 +750,9 @@ export function WorkReportsTableView() {
                   onChange={(e) => setReviewStatus(e.target.value as any)}
                   className="w-full rounded-xl border border-neutral-300 p-2 text-xs font-medium outline-none focus:border-indigo-500"
                 >
-                  <option value="APPROVED">APPROVED (स्वीकृत)</option>
-                  <option value="REVIEWED">REVIEWED (देखा गया)</option>
-                  <option value="REJECTED">REJECTED (अस्वीकृत / दोबारा भेजो)</option>
+                  <option value="APPROVED">APPROVED</option>
+                  <option value="REVIEWED">REVIEWED</option>
+                  <option value="REJECTED">REJECTED (Send Back for Revision)</option>
                 </select>
               </div>
 

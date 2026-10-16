@@ -369,7 +369,7 @@ export async function request<T>(
 
       if (response.status >= 502 && response.status <= 504) {
         notifyNetworkIssue(
-          `Server unavailable (${response.status}: ${response.statusText || 'Gateway Error'}). Kripya server status ya internet check karein.`,
+          `Server unavailable (${response.status}: ${response.statusText || 'Gateway Error'}). Please check server status or your internet connection.`,
           `HTTP ${response.status}`
         );
       }
@@ -411,8 +411,8 @@ export async function request<T>(
     const rawMsg = error instanceof Error ? error.message : 'Network communication error';
     const isActuallyOffline = typeof navigator !== 'undefined' && !navigator.onLine;
     const netMessage = isActuallyOffline
-      ? 'Aapka internet connection band hai. Kripya Wi-Fi ya mobile data check karein.'
-      : 'Backend server se sampark nahi ho pa raha hai (Connection Refused). Server ya network check karein.';
+      ? 'Your internet connection is offline. Please check your network connection.'
+      : 'Unable to connect to the backend server. Please verify your internet connection or server status.';
 
     notifyNetworkIssue(netMessage, rawMsg);
 
@@ -441,8 +441,8 @@ export function notifyNetworkIssue(customMessage?: string, details?: string): vo
     const message =
       customMessage ||
       (isActuallyOffline
-        ? 'Aapka internet connection band hai. Kripya apna Wi-Fi ya mobile data check karein.'
-        : 'Backend server se connection toot gaya hai ya server unreachable hai.');
+        ? 'Your internet connection is offline. Please check your network connection.'
+        : 'Connection to backend server was lost or server is unreachable.');
 
     window.dispatchEvent(
       new CustomEvent('app:network-issue', {

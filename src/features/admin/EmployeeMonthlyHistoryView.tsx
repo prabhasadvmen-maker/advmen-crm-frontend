@@ -110,6 +110,18 @@ export function EmployeeMonthlyHistoryView({
 
   const { addToast } = useUIStore();
 
+  // Normalize employee matching
+  const matchedEmp = useMemo(() => {
+    return (
+      availableEmployees.find(
+        (e) =>
+          e.userId === selectedUserId ||
+          (e.employeeId && e.employeeId.toLowerCase() === selectedUserId.toLowerCase()) ||
+          e.name.toLowerCase() === selectedUserId.toLowerCase()
+      ) || (availableEmployees.length > 0 ? availableEmployees[0] : null)
+    );
+  }, [availableEmployees, selectedUserId]);
+
   // If preselectedUserId changes from outside
   useEffect(() => {
     if (preselectedUserId && preselectedUserId !== selectedUserId) {
@@ -124,19 +136,35 @@ export function EmployeeMonthlyHistoryView({
     }
   }, [selectedUserId, availableEmployees]);
 
+  // Ensure select value matches available option
+  useEffect(() => {
+    if (matchedEmp && selectedUserId !== matchedEmp.userId && availableEmployees.some((e) => e.userId === matchedEmp.userId)) {
+      setSelectedUserId(matchedEmp.userId);
+    }
+  }, [matchedEmp, selectedUserId, availableEmployees]);
+
   const loadHistory = useCallback(async () => {
-    if (!selectedUserId) return;
+    const targetId = matchedEmp?.userId || selectedUserId;
+    if (!targetId) return;
     setIsLoading(true);
     setError(null);
     try {
-      const data = await attendanceApi.getEmployeeMonthlyHistory(selectedUserId, selectedMonth);
+      const data = await attendanceApi.getEmployeeMonthlyHistory(targetId, selectedMonth);
       setHistoryData(data);
     } catch (err: any) {
+      // Graceful fallback to employeeId if targetId failed
+      if (matchedEmp?.employeeId && matchedEmp.employeeId !== targetId) {
+        try {
+          const fallbackData = await attendanceApi.getEmployeeMonthlyHistory(matchedEmp.employeeId, selectedMonth);
+          setHistoryData(fallbackData);
+          return;
+        } catch {}
+      }
       setError(err?.message || 'Could not load monthly attendance history');
     } finally {
       setIsLoading(false);
     }
-  }, [selectedUserId, selectedMonth]);
+  }, [matchedEmp, selectedUserId, selectedMonth]);
 
   useEffect(() => {
     void loadHistory();
@@ -544,7 +572,7 @@ export function EmployeeMonthlyHistoryView({
               <div className="flex items-center justify-between">
                 <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-800 uppercase tracking-wider">
                   <CalendarDays className="h-4 w-4 text-emerald-600" />
-                  <span>Days Present (दिन आए)</span>
+                  <span>Days Present</span>
                 </span>
                 <span className="text-xs font-mono font-black px-2 py-0.5 rounded-full bg-emerald-200 text-emerald-900">
                   {historyData.summary.attendancePercentage}% Attendance
@@ -568,7 +596,7 @@ export function EmployeeMonthlyHistoryView({
               <div className="flex items-center justify-between">
                 <span className="flex items-center gap-1.5 text-xs font-bold text-blue-800 uppercase tracking-wider">
                   <LogIn className="h-4 w-4 text-blue-600" />
-                  <span>Check-In Time (आने का समय)</span>
+                  <span>Check-In Time</span>
                 </span>
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-200 text-blue-900">
                   Avg Arrival
@@ -587,7 +615,7 @@ export function EmployeeMonthlyHistoryView({
               <div className="flex items-center justify-between">
                 <span className="flex items-center gap-1.5 text-xs font-bold text-amber-800 uppercase tracking-wider">
                   <Utensils className="h-4 w-4 text-amber-600" />
-                  <span>Lunch History (लंच का समय)</span>
+                  <span>Lunch History</span>
                 </span>
                 <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full bg-amber-200 text-amber-900">
                   {historyData.summary.totalLunchBreaksCount} Lunches
@@ -606,7 +634,7 @@ export function EmployeeMonthlyHistoryView({
               <div className="flex items-center justify-between">
                 <span className="flex items-center gap-1.5 text-xs font-bold text-purple-800 uppercase tracking-wider">
                   <Clock className="h-4 w-4 text-purple-600" />
-                  <span>Total Working Time (कुल काम)</span>
+                  <span>Total Working Time</span>
                 </span>
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-200 text-purple-900">
                   Total Shift Hours
@@ -621,13 +649,13 @@ export function EmployeeMonthlyHistoryView({
             </div>
           </div>
 
-          {/* Quick Dates Ribbon: "किस-किस दिन आए हैं" (List of all present dates in the month) */}
+          {/* Quick Dates Ribbon: (List of all present dates in the month) */}
           <div className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-xs space-y-2">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="h-4 w-4 text-emerald-600" />
                 <span className="text-xs font-bold text-neutral-900">
-                  Present Dates in {historyData.monthLabel} (किस-किस दिन आए हैं):
+                  Present Dates in {historyData.monthLabel}:
                 </span>
                 <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800 font-mono">
                   {historyData.summary.presentDates.length} Days
@@ -771,8 +799,8 @@ export function EmployeeMonthlyHistoryView({
                       <tr>
                         <th className="px-4 py-3.5">Day & Date</th>
                         <th className="px-4 py-3.5">Status</th>
-                        <th className="px-4 py-3.5">Arrival / Check-In Time (आने का समय)</th>
-                        <th className="px-4 py-3.5">Departure / Check-Out Time (जाने का समय)</th>
+                        <th className="px-4 py-3.5">Arrival / Check-In Time</th>
+                        <th className="px-4 py-3.5">Departure / Check-Out Time</th>
                         <th className="px-4 py-3.5">Shift Working Time</th>
                         <th className="px-4 py-3.5 bg-amber-50/70 border-x border-amber-200 text-amber-950">
                           <div className="flex items-center gap-1 text-amber-900">
@@ -856,7 +884,7 @@ export function EmployeeMonthlyHistoryView({
                                       : 'bg-rose-600'
                                   }`}
                                 />
-                                <span>{day.status === 'HALF_DAY' ? 'HALF DAY (Late)' : day.status === 'WEEKEND' ? 'SUNDAY OFF' : day.status}</span>
+                                <span>{day.status === 'HALF_DAY' ? 'HALF DAY (Late >10:05)' : day.status === 'WEEKEND' ? 'SUNDAY OFF' : day.status === 'PRESENT' ? 'FULL DAY (On-Time)' : day.status}</span>
                               </span>
                             </td>
 
@@ -868,18 +896,20 @@ export function EmployeeMonthlyHistoryView({
                                     <LogIn className="w-3.5 h-3.5 text-emerald-600" />
                                     <span>{day.loginTimeFormatted}</span>
                                   </div>
-                                  {day.loginEvents && day.loginEvents.length > 1 && (
-                                    <div className="flex flex-wrap items-center gap-1 pt-0.5 max-w-[280px]">
-                                      <span className="text-[10px] text-blue-700 font-bold bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
-                                        {day.loginEvents.length} Sessions
-                                      </span>
-                                      {day.loginEvents.slice(0, 3).map((ev, sIdx) => (
+                                  <div className="text-[10px] text-emerald-800 font-bold">
+                                    {day.loginEvents && day.loginEvents.length > 0
+                                      ? `${day.loginEvents.length} Punch-in Session${day.loginEvents.length === 1 ? '' : 's'}`
+                                      : '1 Punch-in Session'}
+                                  </div>
+                                  {day.loginEvents && day.loginEvents.length > 0 && (
+                                    <div className="flex flex-wrap items-center gap-1 pt-0.5 max-w-[300px]">
+                                      {day.loginEvents.map((ev, sIdx) => (
                                         <span
                                           key={sIdx}
-                                          className="text-[9px] font-mono px-1 py-0.2 rounded bg-neutral-100 text-neutral-700 border border-neutral-200"
-                                          title={`Session #${sIdx + 1}: ${ev.loginTimeFormatted} to ${ev.logoutTimeFormatted || 'Active'}`}
+                                          className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-emerald-100/70 text-emerald-900 border border-emerald-200"
+                                          title={`Session #${sIdx + 1}: Punch-in at ${ev.loginTimeFormatted || '-'}`}
                                         >
-                                          #{sIdx + 1}: {ev.loginTimeFormatted?.replace(/:00\s*/, ' ') || '-'} → {ev.logoutTimeFormatted?.replace(/:00\s*/, ' ') || 'Active'}
+                                          #{sIdx + 1}: {ev.loginTimeFormatted?.replace(/:00\s*/, ' ') || '-'}
                                         </span>
                                       ))}
                                     </div>
@@ -1271,14 +1301,14 @@ export function EmployeeMonthlyHistoryView({
             {/* Attendance Status & Timing Summary */}
             <div className="grid grid-cols-2 gap-3">
               <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-3">
-                <div className="text-[10px] font-bold text-emerald-800 uppercase">Check-in Time (आने का समय)</div>
+                <div className="text-[10px] font-bold text-emerald-800 uppercase">Check-in Time</div>
                 <div className="mt-1 text-base font-black text-emerald-950 font-mono">
                   {selectedDayDetails.loginTimeFormatted || 'Not Checked In'}
                 </div>
               </div>
 
               <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3">
-                <div className="text-[10px] font-bold text-amber-800 uppercase">Check-out Time (जाने का समय)</div>
+                <div className="text-[10px] font-bold text-amber-800 uppercase">Check-out Time</div>
                 <div className="mt-1 text-base font-black text-amber-950 font-mono">
                   {selectedDayDetails.logoutTimeFormatted || 'Still in Office'}
                 </div>
@@ -1290,7 +1320,7 @@ export function EmployeeMonthlyHistoryView({
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5 font-bold text-amber-950 text-xs">
                   <Utensils className="w-4 h-4 text-amber-600" />
-                  <span>Lunch Breakdown (लंच का पूरा समय):</span>
+                  <span>Lunch Breakdown:</span>
                 </div>
                 <span className="font-mono font-bold text-xs text-amber-900 bg-amber-200 px-2 py-0.5 rounded">
                   Total: {selectedDayDetails.totalLunchDurationFormatted}
@@ -1357,7 +1387,7 @@ export function EmployeeMonthlyHistoryView({
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-indigo-950 flex items-center gap-1.5">
                     <FileText className="w-3.5 h-3.5 text-indigo-600" />
-                    Punch-Out Work Report (कार्य विवरण)
+                    Punch-Out Work Report
                   </span>
                   {selectedDayDetails.workCategory && (
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-white text-indigo-800 border border-indigo-200 shadow-2xs">
@@ -1536,7 +1566,7 @@ export function EmployeeMonthlyHistoryView({
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <h3 className="text-base font-black truncate text-white">
-                      Daily Activity & Work Report (कर्मचारी कार्य रिपोर्ट)
+                      Daily Activity & Work Report
                     </h3>
                     <span className="font-mono text-xs px-2 py-0.5 rounded bg-blue-500/30 text-blue-200 border border-blue-400/30 font-bold">
                       {dailyReportData?.employee?.name || currentEmp?.name}
@@ -1637,7 +1667,7 @@ export function EmployeeMonthlyHistoryView({
                       <div className="flex items-center justify-between">
                         <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-600 flex items-center gap-1">
                           <LogIn className="w-3.5 h-3.5 text-blue-600" />
-                          <span>Check-In (आने का समय)</span>
+                          <span>Check-In</span>
                         </span>
                         <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
                           dailyReportData.attendance?.isHalfDay
@@ -1676,7 +1706,7 @@ export function EmployeeMonthlyHistoryView({
                       <div className="flex items-center justify-between">
                         <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-600 flex items-center gap-1">
                           <Utensils className="w-3.5 h-3.5 text-amber-600" />
-                          <span>Lunch Duration (लंच समय)</span>
+                          <span>Lunch Duration</span>
                         </span>
                         <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-amber-200 text-amber-900">
                           20m Limit
@@ -1709,7 +1739,7 @@ export function EmployeeMonthlyHistoryView({
                       <div className="flex items-center justify-between">
                         <span className="text-[11px] font-bold uppercase tracking-wider text-purple-800 flex items-center gap-1">
                           <Clock className="w-3.5 h-3.5 text-purple-600" />
-                          <span>Shift Time (ऑफिस समय)</span>
+                          <span>Shift Time</span>
                         </span>
                         <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-200 text-purple-900">
                           Total Hours
@@ -1728,7 +1758,7 @@ export function EmployeeMonthlyHistoryView({
                       <div className="flex items-center justify-between">
                         <span className="text-[11px] font-bold uppercase tracking-wider text-blue-800 flex items-center gap-1">
                           <Sparkles className="w-3.5 h-3.5 text-blue-600" />
-                          <span>Work Actions (आज का काम)</span>
+                          <span>Work Actions</span>
                         </span>
                         <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-200 text-blue-900 font-mono">
                           {dailyReportData.summary.totalTimelineEvents} Events
@@ -1756,7 +1786,7 @@ export function EmployeeMonthlyHistoryView({
                           <div className="flex items-center gap-2">
                             <Utensils className="w-4 h-4 text-amber-600" />
                             <h4 className="text-xs font-bold uppercase tracking-wider text-amber-950">
-                              Lunch Break Timings (लंच शुरू व punch-in समय)
+                              Lunch Break Timings
                             </h4>
                           </div>
                           <span className="text-[10px] font-mono font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded">
@@ -1891,7 +1921,7 @@ export function EmployeeMonthlyHistoryView({
                             <div className="flex items-center gap-1.5">
                               <FileText className="w-4 h-4 text-indigo-600" />
                               <h4 className="text-xs font-bold uppercase tracking-wider text-neutral-900">
-                                Punch-Out Work Report (कार्य विवरण)
+                                Punch-Out Work Report
                               </h4>
                             </div>
                             {dailyReportData.attendance.workCategory && (
@@ -1960,7 +1990,7 @@ export function EmployeeMonthlyHistoryView({
                           <div className="flex items-center gap-2">
                             <Briefcase className="w-4 h-4 text-indigo-600" />
                             <h4 className="text-xs font-bold uppercase tracking-wider text-neutral-900">
-                              Today's Complete Activity Timeline (आज क्या-क्या किया)
+                              Today's Complete Activity Timeline
                             </h4>
                           </div>
                           <span className="text-[11px] font-mono font-bold text-neutral-500">

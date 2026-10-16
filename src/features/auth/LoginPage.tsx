@@ -126,8 +126,8 @@ export function LoginPage() {
       const isInvalidCredentials = err?.code === 'INVALID_CREDENTIALS';
       const message = isNetworkIssue
         ? (!navigator.onLine
-            ? 'Aapka internet connection band hai. Kripya apna Wi-Fi ya mobile data on karein.'
-            : 'Backend server se sampark nahi ho pa raha hai. Kripya apna internet connection ya backend server status check karein.')
+            ? 'Your internet connection is offline. Please check your network connection.'
+            : 'Unable to connect to the backend server. Please verify your internet connection or backend server status.')
         : isInvalidCredentials
         ? 'The Employee ID/email or password is incorrect. Please check your details and try again.'
         : err?.message || 'Unable to sign in. Please try again later.';
@@ -135,7 +135,7 @@ export function LoginPage() {
       setLoginError(message);
       addToast({
         type: 'danger',
-        title: isNetworkIssue ? 'Network / Connection Error (नेटवर्क समस्या)' : 'Authentication Failed',
+        title: isNetworkIssue ? 'Network / Connection Error' : 'Authentication Failed',
         message,
         durationMs: isNetworkIssue ? 7000 : 4000,
       });

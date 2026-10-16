@@ -129,12 +129,12 @@ export function AdminLoginPage() {
 
       if (isNetworkIssue) {
         const netMsg = !navigator.onLine
-          ? 'Aapka internet connection band hai. Kripya apna Wi-Fi ya mobile data on karein.'
-          : 'Backend server se sampark nahi ho pa raha hai. Kripya apna internet connection ya backend server status check karein (Port 5001 / Server unreachable).';
+          ? 'Your internet connection is offline. Please check your network connection.'
+          : 'Unable to connect to the backend server. Please verify your internet connection or backend server status.';
         setNetworkError(netMsg);
         addToast({
           type: 'danger',
-          title: 'Network / Connection Error (नेटवर्क समस्या)',
+          title: 'Network / Connection Error',
           message: netMsg,
           durationMs: 7000,
         });
@@ -147,8 +147,8 @@ export function AdminLoginPage() {
       } else if (err?.code === 'INVALID_CREDENTIALS') {
         addToast({
           type: 'danger',
-          title: 'Login Details Galat Hain',
-          message: 'Admin email ya password galat hai. Dobara check karke try karein.',
+          title: 'Invalid Credentials',
+          message: 'The email or password provided is incorrect. Please check and try again.',
         });
       } else {
         addToast({
@@ -350,7 +350,7 @@ export function AdminLoginPage() {
                   <div className="flex-1 min-w-0">
                     <div className="font-bold text-rose-300 flex items-center gap-1.5">
                       <span>Network / Connection Issue</span>
-                      <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-rose-900/60 text-rose-300 border border-rose-700/50">नेटवर्क एरर</span>
+                      <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-rose-900/60 text-rose-300 border border-rose-700/50">Network Offline</span>
                     </div>
                     <p className="text-[11px] text-rose-200/90 mt-1 leading-relaxed">{networkError}</p>
                   </div>

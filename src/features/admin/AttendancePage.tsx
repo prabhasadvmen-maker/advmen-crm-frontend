@@ -26,6 +26,7 @@ import {
   Trash2,
   Utensils,
   FileText,
+  ChevronRight,
 } from 'lucide-react';
 import { useUIStore } from '@/stores/uiStore';
 import { EmployeeMonthlyHistoryView } from './EmployeeMonthlyHistoryView';
@@ -413,6 +414,7 @@ export function AttendancePage() {
   const [systemUsers, setSystemUsers] = useState<UserDto[]>([]);
   const [selectedEmployeeForMonth, setSelectedEmployeeForMonth] = useState<string>('');
   const [selectedEmployee, setSelectedEmployee] = useState<EmployeeMonthSummary | null>(null);
+  const [showPastRecordsInDrawer, setShowPastRecordsInDrawer] = useState(false);
   const [previewSelfie, setPreviewSelfie] = useState<{ url: string; name: string; time: string; location?: string } | null>(null);
   const [searchParams] = useSearchParams();
   const urlSearch = searchParams.get('search') || '';
@@ -734,13 +736,21 @@ export function AttendancePage() {
       }
     >();
     for (const emp of employees) {
-      map.set(emp.userId, {
-        userId: emp.userId,
+      const matchUser = systemUsers.find(
+        (u) =>
+          (emp.employeeId && u.employeeId && u.employeeId.toUpperCase() === emp.employeeId.toUpperCase()) ||
+          (emp.email && u.email && u.email.toLowerCase() === emp.email.toLowerCase()) ||
+          u.id === emp.userId
+      );
+      const effectiveId = matchUser?.id || emp.userId;
+      map.set(effectiveId, {
+        userId: effectiveId,
         name: emp.name,
         email: emp.email,
-        employeeId: emp.employeeId,
-        department: emp.department,
-        role: emp.role,
+        employeeId: emp.employeeId || matchUser?.employeeId,
+        department: emp.department || matchUser?.department,
+        role: emp.role || matchUser?.role,
+        avatarUrl: matchUser?.avatarUrl,
         latestSelfie: emp.latestSelfie,
       });
     }
@@ -759,6 +769,8 @@ export function AttendancePage() {
       } else {
         if (!existing.avatarUrl) existing.avatarUrl = u.avatarUrl;
         if (!existing.employeeId) existing.employeeId = u.employeeId;
+        if (!existing.department && u.department) existing.department = u.department;
+        if (!existing.role && u.role) existing.role = u.role;
       }
     }
     return Array.from(map.values()).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
@@ -796,6 +808,45 @@ export function AttendancePage() {
 
   const handleOpenEmployeeDetails = useCallback(
     (record: AttendanceRecord | EmployeeMonthSummary) => {
+      const fetchHistoryForEmp = (targetEmpId: string, targetName: string, targetUserId: string) => {
+        const searchTarget = targetEmpId && targetEmpId !== 'emp' ? targetEmpId : (targetName || targetUserId);
+        if (!searchTarget || searchTarget === 'emp') return;
+        attendanceApi.getAttendance({ search: searchTarget, limit: 100, date: 'ALL' }).then((res) => {
+          if (res && Array.isArray(res.records) && res.records.length > 0) {
+            const cleanSearch = searchTarget.toLowerCase();
+            const empRecords = res.records.filter((r) => {
+              const rEmpId = (r.employeeId || (r as any).empId || '').trim().toLowerCase();
+              const rName = (r.userName || (r as any).empName || (r as any).name || '').trim().toLowerCase();
+              const rUserId = (r.userId || '').trim().toLowerCase();
+              return (rEmpId && rEmpId === cleanSearch) || (rUserId && rUserId === cleanSearch) || (rName && rName === cleanSearch);
+            });
+            if (empRecords.length > 0) {
+              setSelectedEmployee((prev) => {
+                if (!prev) return prev;
+                const existingIds = new Set(prev.records.map((r) => r._id));
+                const merged = [...prev.records];
+                for (const r of empRecords) {
+                  if (!existingIds.has(r._id)) {
+                    merged.push(r);
+                    existingIds.add(r._id);
+                  }
+                }
+                merged.sort((a, b) => {
+                  const timeA = parseToValidDate(a.loginTime, a.date)?.getTime() || 0;
+                  const timeB = parseToValidDate(b.loginTime, b.date)?.getTime() || 0;
+                  return timeB - timeA;
+                });
+                return {
+                  ...prev,
+                  records: merged,
+                  daysPresent: new Set(merged.map((r) => r.date)).size,
+                };
+              });
+            }
+          }
+        }).catch(() => {});
+      };
+
       if ('records' in record && Array.isArray((record as EmployeeMonthSummary).records)) {
         const empSummary = record as EmployeeMonthSummary;
         const targetEmpId = (empSummary.employeeId || '').trim().toLowerCase();
@@ -823,6 +874,9 @@ export function AttendancePage() {
           ...empSummary,
           records: strictRecords.length > 0 ? strictRecords : empSummary.records,
         });
+        setShowPastRecordsInDrawer(false);
+
+        fetchHistoryForEmp(targetEmpId, targetName, targetUserId);
         return;
       }
 
@@ -890,6 +944,9 @@ export function AttendancePage() {
         latestLogout,
         latestSelfie: bestSelfie,
       });
+      setShowPastRecordsInDrawer(false);
+
+      fetchHistoryForEmp(targetEmpId, targetName, targetUserId);
     },
     [records]
   );
@@ -1062,7 +1119,7 @@ export function AttendancePage() {
             }`}
           >
             <Utensils className="h-4 w-4 text-amber-600" />
-            <span>Employee Full History & Lunch (मासिक व लंच इतिहास)</span>
+            <span>Employee Full History & Lunch</span>
             <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800 font-bold">
               Full Month
             </span>
@@ -1092,7 +1149,7 @@ export function AttendancePage() {
             }`}
           >
             <FileText className="h-4 w-4 text-indigo-600" />
-            <span>Daily Work Reports (दैनिक कार्य रिपोर्ट)</span>
+            <span>Daily Work Reports</span>
             <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-xs text-indigo-800 font-bold">
               Reports DB
             </span>
@@ -1115,7 +1172,7 @@ export function AttendancePage() {
                     : 'text-neutral-600 hover:text-neutral-900'
                 }`}
               >
-                Today (आज)
+                Today
               </button>
               <button
                 type="button"
@@ -1220,7 +1277,7 @@ export function AttendancePage() {
             </div>
             <h3 className="text-base font-bold text-neutral-900">No Attendance Records for Selected Filter</h3>
             <p className="mt-1 text-xs text-neutral-500 max-w-md mx-auto leading-relaxed">
-              Is filter ke liye koi punch-in record nahi mila. Shift check-in start hone par live records yaha stream honge. Pichhle records dekhne ke liye neeche buttons click karein.
+              No attendance records found for this filter. Live records will stream here as soon as shift check-ins start. Click below to view previous records.
             </p>
             <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
               <Button
@@ -1232,7 +1289,7 @@ export function AttendancePage() {
                 }}
                 className="bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200 font-semibold"
               >
-                📅 View This Month (इस महीने का डेटा)
+                📅 View This Month
               </Button>
               <Button
                 variant="secondary"
@@ -1243,7 +1300,7 @@ export function AttendancePage() {
                 }}
                 className="font-semibold text-neutral-700"
               >
-                📋 View All Records (सभी रिकॉर्ड्स)
+                📋 View All Records
               </Button>
               <Button
                 variant="primary"
@@ -1264,7 +1321,7 @@ export function AttendancePage() {
                 <div className="flex items-center gap-2.5">
                   <Clock className="w-4 h-4 text-blue-600 shrink-0" />
                   <span>
-                    <strong>Aaj (Today)</strong> ka punch-in abhi shuru nahi hua hai (Standard shift 10:00 AM). Pichhle active attendance records neeche display ho rahe hain:
+                    <strong>Today's</strong> check-ins have not started yet (Standard shift 10:00 AM). Showing latest active attendance records below:
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
@@ -1669,9 +1726,9 @@ export function AttendancePage() {
                       key={employee.userId}
                       tabIndex={0}
                       role="button"
-                      onClick={() => setSelectedEmployee(employee)}
+                      onClick={() => handleOpenEmployeeDetails(employee)}
                       onKeyDown={(event) => {
-                        if (event.key === 'Enter' || event.key === ' ') setSelectedEmployee(employee);
+                        if (event.key === 'Enter' || event.key === ' ') handleOpenEmployeeDetails(employee);
                       }}
                       className="cursor-pointer hover:bg-blue-50/50 focus:bg-blue-50/50 focus:outline-none transition-colors"
                     >
@@ -1735,7 +1792,7 @@ export function AttendancePage() {
                             size="xs"
                             onClick={(event) => {
                               event.stopPropagation();
-                              setSelectedEmployee(employee);
+                              handleOpenEmployeeDetails(employee);
                             }}
                           >
                             View details
@@ -1758,7 +1815,16 @@ export function AttendancePage() {
         title={selectedEmployee?.name || 'Employee Attendance & Login Details'}
         subtitle={
           selectedEmployee
-            ? `${selectedEmployee.employeeId || selectedEmployee.email} · ${selectedEmployee.department}`
+            ? [
+                selectedEmployee.employeeId && selectedEmployee.employeeId !== 'undefined'
+                  ? selectedEmployee.employeeId
+                  : selectedEmployee.email,
+                selectedEmployee.department && selectedEmployee.department !== 'undefined'
+                  ? selectedEmployee.department
+                  : (selectedEmployee.role && selectedEmployee.role !== 'undefined'
+                      ? selectedEmployee.role.replace(/_/g, ' ')
+                      : 'Sales & Business Development'),
+              ].filter(Boolean).join(' · ')
             : undefined
         }
         badge={
@@ -1892,7 +1958,7 @@ export function AttendancePage() {
                     className="bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-200 font-bold"
                     icon={<Utensils className="w-3.5 h-3.5 text-amber-600" />}
                   >
-                    Full Month History & Lunch (मासिक व लंच)
+                    Full Month History & Lunch
                   </Button>
                   <Link
                     to={`/leads?search=${encodeURIComponent(selectedEmployee.name)}`}
@@ -1911,317 +1977,457 @@ export function AttendancePage() {
 
               {/* Day-by-Day Records List */}
               <div className="space-y-4 pt-1">
+                {(() => {
+                  const todayStr = new Intl.DateTimeFormat('en-CA', {
+                    timeZone: 'Asia/Kolkata',
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                  }).format(new Date());
 
-                <div className="flex items-center justify-between border-b border-neutral-200 pb-2">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-neutral-600">
-                    Day-Wise Login & Logout Timeline
-                  </h4>
-                  <span className="text-[11px] font-medium text-neutral-500">
-                    {selectedEmployee.records.length} date records
-                  </span>
-                </div>
+                  const todayRecord = selectedEmployee.records.find((r) => r.date === todayStr);
+                  const pastRecords = selectedEmployee.records.filter((r) => r.date !== todayStr);
 
-                {selectedEmployee.records.map((record) => {
-                  const events = [...getLoginEvents(record)].sort(
-                    (a, b) => new Date(a.loginTime).getTime() - new Date(b.loginTime).getTime()
-                  );
-                  const isDayLate = record.status === 'LATE';
+                  const renderDaySection = (record: AttendanceRecord, isTodaySection: boolean = false) => {
+                    const events = [...getLoginEvents(record)].sort(
+                      (a, b) => new Date(a.loginTime).getTime() - new Date(b.loginTime).getTime()
+                    );
+                    const firstLogin = events[0] ? parseToValidDate(events[0].loginTime, record.date) : null;
+                    const isArrivalAfter1005 = firstLogin
+                      ? (firstLogin.getHours() > 10 || (firstLogin.getHours() === 10 && (firstLogin.getMinutes() > 5 || (firstLogin.getMinutes() === 5 && firstLogin.getSeconds() > 0))))
+                      : false;
+                    const isHalfDay = (record.status as string) === 'HALF_DAY' || (record.status as string) === 'Half Day' || isArrivalAfter1005;
+                    const completedLogouts = events.filter((e) => Boolean(e.logoutTime) && String(e.logoutTime).toLowerCase() !== 'invalid date');
+
+                    return (
+                      <section
+                        key={record._id}
+                        className={`overflow-hidden rounded-2xl border transition-shadow ${
+                          isTodaySection
+                            ? 'border-blue-300 bg-white shadow-md ring-2 ring-blue-500/20'
+                            : 'border-neutral-200 bg-white shadow-sm hover:shadow'
+                        }`}
+                      >
+                        {/* Date Heading & Status */}
+                        <div className={`flex flex-wrap items-center justify-between px-4 py-3 border-b ${
+                          isTodaySection ? 'bg-gradient-to-r from-blue-50 via-indigo-50/50 to-white border-blue-200' : 'bg-neutral-50 border-neutral-200'
+                        }`}>
+                          <div className="flex items-center gap-2">
+                            <CalendarDays className={`h-4 w-4 ${isTodaySection ? 'text-blue-600' : 'text-neutral-500'}`} />
+                            <span className="text-sm font-bold text-neutral-900">
+                              {isTodaySection ? "Today's Record: " : ''}
+                              {new Date(`${record.date}T12:00:00Z`).toLocaleDateString('en-IN', {
+                                weekday: 'short',
+                                year: 'numeric',
+                                month: 'short',
+                                day: 'numeric',
+                                timeZone: 'Asia/Kolkata',
+                              })}
+                            </span>
+                            <span className="font-mono text-xs text-neutral-400">({record.date})</span>
+                            {isTodaySection && (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-blue-600 text-white shadow-2xs">
+                                Live Today
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Half Day vs Present Status Badge */}
+                          <div className="flex items-center gap-2">
+                            {isHalfDay ? (
+                              <span className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-black bg-amber-100 text-amber-900 border border-amber-300 shadow-2xs">
+                                <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                                <span>Half Day (Late Arrival &gt;10:05 AM)</span>
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-black bg-emerald-100 text-emerald-900 border border-emerald-300 shadow-2xs">
+                                <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                                <span>Full Day / On Time (Arrival &le;10:05 AM)</span>
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Today's 4 Key Punch Stats Banner */}
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 p-3 bg-neutral-50/70 border-b border-neutral-200/80 text-xs">
+                          <div className="rounded-xl border border-emerald-200 bg-white p-2.5">
+                            <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-800 flex items-center gap-1">
+                              <LogIn className="w-3 h-3 text-emerald-600" />
+                              <span>Check-Ins Today</span>
+                            </div>
+                            <div className="mt-1 font-mono font-black text-base text-emerald-950">
+                              {events.length} {events.length === 1 ? 'Time' : 'Times'}
+                            </div>
+                            <div className="text-[10px] font-mono text-emerald-700 truncate">
+                              {events[0] ? formatExactTime(events[0].loginTime, record.date) : '-'}
+                            </div>
+                          </div>
+
+                          <div className="rounded-xl border border-amber-200 bg-white p-2.5">
+                            <div className="text-[10px] font-bold uppercase tracking-wider text-amber-800 flex items-center gap-1">
+                              <Utensils className="w-3 h-3 text-amber-600" />
+                              <span>Lunch Breaks</span>
+                            </div>
+                            <div className="mt-1 font-mono font-black text-base text-amber-950">
+                              {record.lunchBreaks?.length || 0} {record.lunchBreaks?.length === 1 ? 'Break' : 'Breaks'}
+                            </div>
+                            <div className="text-[10px] font-mono text-amber-700 truncate">
+                              {record.lunchDurationFormatted || '0 min'}
+                            </div>
+                          </div>
+
+                          <div className="rounded-xl border border-blue-200 bg-white p-2.5">
+                            <div className="text-[10px] font-bold uppercase tracking-wider text-blue-800 flex items-center gap-1">
+                              <LogOut className="w-3 h-3 text-blue-600" />
+                              <span>Check-Outs</span>
+                            </div>
+                            <div className="mt-1 font-mono font-black text-base text-blue-950">
+                              {completedLogouts.length} {completedLogouts.length === 1 ? 'Check-out' : 'Check-outs'}
+                            </div>
+                            <div className="text-[10px] font-mono text-blue-700 truncate">
+                              {events.length > completedLogouts.length ? '🟢 In Office' : 'Completed'}
+                            </div>
+                          </div>
+
+                          <div className="rounded-xl border border-purple-200 bg-white p-2.5">
+                            <div className="text-[10px] font-bold uppercase tracking-wider text-purple-800 flex items-center gap-1">
+                              <Clock className="w-3 h-3 text-purple-600" />
+                              <span>Day Status</span>
+                            </div>
+                            <div className="mt-1 font-bold text-sm text-purple-950">
+                              {isHalfDay ? 'Half Day' : 'Full Day'}
+                            </div>
+                            <div className="text-[10px] text-purple-700 truncate">
+                              {isHalfDay ? 'Late arrival' : 'On-time present'}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Selfie & Location Card */}
+                        {record.selfieUrl && record.selfieUrl.length > 10 && !record.selfieUrl.includes('image/svg+xml') && (
+                          <div className="border-b border-neutral-100 p-4 bg-gradient-to-r from-emerald-50/40 to-blue-50/30 flex items-center gap-3.5">
+                            <div
+                              onClick={() =>
+                                setPreviewSelfie({
+                                  url: resolveSelfieUrl(record.selfieUrl),
+                                  name: record.userName,
+                                  time: formatDateTime(record.loginTime, record.date),
+                                  location: record.location?.address,
+                                })
+                              }
+                              className="relative group cursor-pointer h-16 w-16 shrink-0 rounded-xl overflow-hidden border-2 border-emerald-500 shadow-sm"
+                              title="Click to view full photo"
+                            >
+                              <img
+                                src={resolveSelfieUrl(record.selfieUrl)}
+                                alt="Punch Selfie"
+                                className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                                onError={(e) => {
+                                  (e.target as HTMLElement).style.display = 'none';
+                                }}
+                              />
+                              <div className="absolute inset-0 bg-black/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                <Camera className="h-4 w-4 text-white" />
+                              </div>
+                            </div>
+                            <div className="text-xs space-y-1 min-w-0">
+                              <div className="flex items-center gap-1.5 font-bold text-neutral-800">
+                                <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                                <span>Verified Attendance Selfie</span>
+                              </div>
+                              {record.location?.address && record.location.address !== 'N/A' && (
+                                <div className="text-neutral-600 line-clamp-2 leading-relaxed flex items-start gap-1">
+                                  <MapPin className="h-3.5 w-3.5 text-rose-500 shrink-0 mt-0.5" />
+                                  <span>{record.location.address}</span>
+                                </div>
+                              )}
+                              {record.location?.googleMapsUrl && (
+                                <a
+                                  href={record.location.googleMapsUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-800 hover:underline pt-0.5"
+                                >
+                                  <span>View Map Pin</span>
+                                  <ExternalLink className="h-3 w-3" />
+                                </a>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Lunch Breaks Section for this Day */}
+                        {((record.lunchBreaks && record.lunchBreaks.length > 0) || record.totalLunchDurationSeconds) && (
+                          <div className="border-b border-amber-200/80 p-3 bg-amber-50/70 space-y-2 text-xs">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div className="flex items-center gap-1.5 font-bold text-amber-950">
+                                <Utensils className="w-4 h-4 text-amber-600" />
+                                <span>Lunch Timing & Breaks:</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono text-[10px] bg-amber-200/70 text-amber-900 px-2 py-0.5 rounded font-bold">
+                                  Sched: 1:00 PM · 20m Limit
+                                </span>
+                                {record.lunchDurationFormatted && (
+                                  <span className="font-mono font-black text-amber-950 bg-amber-200 px-2.5 py-0.5 rounded text-[11px] border border-amber-300">
+                                    Total: {record.lunchDurationFormatted}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            {record.lunchBreaks && record.lunchBreaks.length > 0 ? (
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-0.5 font-mono text-[11px]">
+                                {record.lunchBreaks.map((lb, idx) => {
+                                  const sD = parseToValidDate(lb.startTime, record.date);
+                                  const eD = parseToValidDate(lb.endTime, record.date);
+                                  const isOngoing = !eD || lb.status === 'ONGOING';
+                                  const sec = lb.durationSeconds || (sD && eD ? Math.max(0, Math.round((eD.getTime() - sD.getTime()) / 1000)) : 0);
+                                  const isOverstay = sec > 1200;
+                                  return (
+                                    <div key={idx} className={`p-2 rounded-lg border ${isOverstay ? 'bg-amber-100/70 border-amber-300' : 'bg-white border-amber-200'}`}>
+                                      <div className="flex items-center justify-between font-bold text-neutral-900">
+                                        <span>Lunch Break #{idx + 1}</span>
+                                        <span className={isOverstay ? 'text-amber-900' : 'text-emerald-800'}>
+                                          {formatDuration(lb.startTime, lb.endTime, record.date)}
+                                        </span>
+                                      </div>
+                                      <div className="text-[10px] text-neutral-600 mt-1 flex items-center justify-between">
+                                        <span>Start: {formatExactTime(lb.startTime, record.date)}</span>
+                                        <span>Return: {isOngoing ? 'Ongoing Break' : formatExactTime(lb.endTime, record.date)}</span>
+                                      </div>
+                                      <div className="mt-1 text-[10px] font-sans font-semibold">
+                                        {isOngoing ? (
+                                          <span className="text-amber-800 animate-pulse">⏳ Break In Progress</span>
+                                        ) : isOverstay ? (
+                                          <span className="text-amber-900">⚠️ Exceeded 20 min rule</span>
+                                        ) : (
+                                          <span className="text-emerald-700">✅ On time (Within 20m)</span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            ) : null}
+                          </div>
+                        )}
+
+                        {/* Login and Logout Event Cards */}
+                        <div className="divide-y divide-neutral-100 p-3 space-y-3">
+                          {events.map((event, index) => {
+                            const parsedOut = parseToValidDate(event.logoutTime, record.date);
+                            const parsedIn = parseToValidDate(event.loginTime, record.date);
+                            const isSameAsLogin = Boolean(parsedIn && parsedOut && Math.abs(parsedOut.getTime() - parsedIn.getTime()) <= 3000);
+
+                            const hasLogout = Boolean(parsedOut && parsedOut.getFullYear() >= 2020 && !isSameAsLogin);
+
+                            const duration = hasLogout ? formatDuration(event.loginTime, event.logoutTime, record.date) : 'Currently Active';
+
+                            return (
+                              <div
+                                key={`${event.loginTime}-${index}`}
+                                className="rounded-lg border border-neutral-200 bg-neutral-50/60 p-3.5 space-y-3"
+                              >
+                                <div className="flex items-center justify-between text-xs">
+                                  <span className="font-bold text-neutral-700 bg-neutral-200/80 px-2 py-0.5 rounded text-[11px]">
+                                    Session #{index + 1}
+                                  </span>
+                                  <span
+                                    className={`font-semibold px-2 py-0.5 rounded-full text-[10px] ${
+                                      hasLogout
+                                        ? 'bg-neutral-200 text-neutral-700'
+                                        : 'bg-emerald-100 text-emerald-800 border border-emerald-300 animate-pulse'
+                                    }`}
+                                  >
+                                    {hasLogout ? `Duration: ${duration}` : '🟢 Currently Active'}
+                                  </span>
+                                </div>
+
+                                {/* 2 Big Cards: Login Time & Logout Time */}
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                                  {/* Login Card */}
+                                  <div className="rounded-lg border border-emerald-200 bg-emerald-50/70 p-2.5">
+                                    <div className="flex items-center gap-1.5 text-emerald-800 text-[10px] font-bold uppercase tracking-wider">
+                                      <LogIn className="h-3.5 w-3.5 text-emerald-600" />
+                                      <span>Login / Check-in Time</span>
+                                    </div>
+                                    <div className="mt-1 text-base font-extrabold text-emerald-950 font-mono">
+                                      {formatExactTime(event.loginTime, record.date)}
+                                    </div>
+                                    <div className="text-[11px] text-emerald-700 mt-0.5">
+                                      {formatDateTime(event.loginTime, record.date)}
+                                    </div>
+                                  </div>
+
+                                  {/* Logout Card */}
+                                  <div
+                                    className={`rounded-lg border p-2.5 ${
+                                      hasLogout
+                                        ? 'border-amber-200 bg-amber-50/70'
+                                        : 'border-blue-200 bg-blue-50/70'
+                                    }`}
+                                  >
+                                    <div
+                                      className={`flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider ${
+                                        hasLogout ? 'text-amber-800' : 'text-blue-800'
+                                      }`}
+                                    >
+                                      <LogOut
+                                        className={`h-3.5 w-3.5 ${hasLogout ? 'text-amber-600' : 'text-blue-600'}`}
+                                      />
+                                      <span>Logout / Check-out Time</span>
+                                    </div>
+                                    <div
+                                      className={`mt-1 text-base font-extrabold font-mono ${
+                                        hasLogout ? 'text-amber-950' : 'text-blue-950'
+                                      }`}
+                                    >
+                                      {hasLogout ? formatExactTime(event.logoutTime, record.date) : 'Not Logged Out Yet'}
+                                    </div>
+                                    {hasLogout ? (
+                                      <>
+                                        <div className="text-[11px] text-amber-700 mt-0.5">
+                                          {formatDateTime(event.logoutTime!, record.date)}
+                                        </div>
+                                        <div className="mt-1.5 flex items-center gap-1.5">
+                                          {event.logoutBy === 'ADMIN' ? (
+                                            <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-200 font-mono">
+                                              <Shield className="w-3 h-3 text-rose-600" />
+                                              <span>Admin {event.logoutAdminName ? `(${event.logoutAdminName})` : ''}</span>
+                                            </span>
+                                          ) : (
+                                            <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200 font-mono">
+                                              <User className="w-3 h-3 text-blue-600" />
+                                              <span>Employee</span>
+                                            </span>
+                                          )}
+                                        </div>
+                                        {/* Away / Admin Logout Duration Detail */}
+                                        {event.logoutBy === 'ADMIN' && (
+                                          <div className="mt-2.5 p-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-950 text-xs space-y-1">
+                                            <div className="flex items-center justify-between">
+                                              <span className="font-bold flex items-center gap-1 text-amber-900">
+                                                <Clock className="w-3.5 h-3.5 text-amber-600" />
+                                                <span>Away / Logout Duration:</span>
+                                              </span>
+                                              {event.awayDurationFormatted ? (
+                                                <span className="font-mono font-black text-amber-950 bg-amber-100 px-2 py-0.5 rounded border border-amber-300">
+                                                  ⏱️ {event.awayDurationFormatted}
+                                                </span>
+                                              ) : (
+                                                <span className="font-mono font-black text-rose-900 bg-rose-100 px-2 py-0.5 rounded border border-rose-300 animate-pulse">
+                                                  ⏱️ <LiveAwayTimer startTime={event.logoutTime} />
+                                                </span>
+                                              )}
+                                            </div>
+                                            {event.reLoginTime && (
+                                              <div className="text-[11px] text-amber-800 flex items-center justify-between pt-1 border-t border-amber-200/60 font-medium">
+                                                <span>Re-login Check-in:</span>
+                                                <span className="font-mono">{formatDateTime(event.reLoginTime, record.date)}</span>
+                                              </div>
+                                            )}
+                                          </div>
+                                        )}
+                                      </>
+                                    ) : (
+                                      <div className="mt-1 flex items-center justify-between">
+                                        <span className="text-[11px] text-blue-700">🟢 Session active</span>
+                                        <button
+                                          onClick={() => handleForceLogout(record)}
+                                          disabled={loggingOutUserId === record.userId}
+                                          className="px-2 py-1 text-[10px] font-bold rounded bg-rose-600 hover:bg-rose-700 text-white transition-colors flex items-center gap-1 cursor-pointer"
+                                        >
+                                          <LogOut className="w-3 h-3" />
+                                          <span>Force Logout</span>
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Technical Details: Source / GPS / IP */}
+                                {(event.ipAddress || event.userAgent) && (
+                                  <div className="text-[10px] text-neutral-500 pt-1 border-t border-neutral-200/60 flex flex-wrap items-center gap-x-3 gap-y-1">
+                                    {event.ipAddress && (
+                                      <span>
+                                        <strong className="text-neutral-600">Source:</strong> {event.ipAddress}
+                                      </span>
+                                    )}
+                                    {event.userAgent && (
+                                      <span className="truncate max-w-full">
+                                        <strong className="text-neutral-600">Device/Note:</strong> {event.userAgent}
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </section>
+                    );
+                  };
 
                   return (
-                    <section
-                      key={record._id}
-                      className="overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-sm transition-shadow hover:shadow"
-                    >
-                      {/* Date Heading & Status */}
-                      <div className="flex items-center justify-between bg-neutral-50 px-4 py-3 border-b border-neutral-200">
-                        <div className="flex items-center gap-2">
-                          <CalendarDays className="h-4 w-4 text-neutral-500" />
-                          <span className="text-sm font-bold text-neutral-900">
-                            {new Date(`${record.date}T12:00:00Z`).toLocaleDateString('en-IN', {
-                              weekday: 'short',
-                              year: 'numeric',
-                              month: 'short',
-                              day: 'numeric',
-                              timeZone: 'Asia/Kolkata',
-                            })}
-                          </span>
-                          <span className="font-mono text-xs text-neutral-400">({record.date})</span>
-                        </div>
-                        <span
-                          className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${
-                            isDayLate
-                              ? 'bg-amber-100 text-amber-800 border border-amber-300'
-                              : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                          }`}
-                        >
-                          {record.status}
+                    <div className="space-y-4">
+                      {/* Primary Section: Today's Live Attendance & Activity */}
+                      <div className="flex items-center justify-between border-b border-neutral-200 pb-2">
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-blue-700 flex items-center gap-1.5">
+                          <span className="h-2 w-2 rounded-full bg-blue-600 animate-pulse" />
+                          <span>Today's Live Punch & Activity</span>
+                        </h4>
+                        <span className="text-[11px] font-mono text-neutral-500 font-semibold">
+                          Date: {todayStr}
                         </span>
                       </div>
 
-                      {/* Selfie & Location Card */}
-                      {record.selfieUrl && record.selfieUrl.length > 10 && !record.selfieUrl.includes('image/svg+xml') && (
-                        <div className="border-b border-neutral-100 p-4 bg-gradient-to-r from-emerald-50/40 to-blue-50/30 flex items-center gap-3.5">
-                          <div
-                            onClick={() =>
-                              setPreviewSelfie({
-                                url: resolveSelfieUrl(record.selfieUrl),
-                                name: record.userName,
-                                time: formatDateTime(record.loginTime, record.date),
-                                location: record.location?.address,
-                              })
-                            }
-                            className="relative group cursor-pointer h-16 w-16 shrink-0 rounded-xl overflow-hidden border-2 border-emerald-500 shadow-sm"
-                            title="Click to view full photo"
-                          >
-                            <img
-                              src={resolveSelfieUrl(record.selfieUrl)}
-                              alt="Punch Selfie"
-                              className="h-full w-full object-cover transition-transform group-hover:scale-105"
-                              onError={(e) => {
-                                (e.target as HTMLElement).style.display = 'none';
-                              }}
-                            />
-                            <div className="absolute inset-0 bg-black/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                              <Camera className="h-4 w-4 text-white" />
-                            </div>
+                      {todayRecord ? (
+                        renderDaySection(todayRecord, true)
+                      ) : (
+                        <div className="rounded-2xl border border-dashed border-amber-300 bg-amber-50/50 p-6 text-center space-y-2">
+                          <Clock className="w-8 h-8 text-amber-500 mx-auto" />
+                          <div className="text-sm font-bold text-amber-950">
+                            No Punch-in recorded for Today ({todayStr}) yet
                           </div>
-                          <div className="text-xs space-y-1 min-w-0">
-                            <div className="flex items-center gap-1.5 font-bold text-neutral-800">
-                              <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                              <span>Verified Attendance Selfie</span>
-                            </div>
-                            {record.location?.address && record.location.address !== 'N/A' && (
-                              <div className="text-neutral-600 line-clamp-2 leading-relaxed flex items-start gap-1">
-                                <MapPin className="h-3.5 w-3.5 text-rose-500 shrink-0 mt-0.5" />
-                                <span>{record.location.address}</span>
-                              </div>
-                            )}
-                            {record.location?.googleMapsUrl && (
-                              <a
-                                href={record.location.googleMapsUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-800 hover:underline pt-0.5"
-                              >
-                                <span>View Map Pin</span>
-                                <ExternalLink className="h-3 w-3" />
-                              </a>
-                            )}
-                          </div>
+                          <p className="text-xs text-amber-800">
+                            Employee has not marked attendance today. Once they punch in with selfie or GPS, live activity will appear here.
+                          </p>
                         </div>
                       )}
 
-                      {/* Lunch Breaks Section for this Day */}
-                      {((record.lunchBreaks && record.lunchBreaks.length > 0) || record.totalLunchDurationSeconds) && (
-                        <div className="border-b border-amber-200/80 p-3 bg-amber-50/70 space-y-2 text-xs">
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <div className="flex items-center gap-1.5 font-bold text-amber-950">
-                              <Utensils className="w-4 h-4 text-amber-600" />
-                              <span>Lunch Timing & Breaks (लंच का समय):</span>
-                            </div>
+                      {/* Secondary Section: Previous 10 Days History */}
+                      {pastRecords.length > 0 && (
+                        <div className="pt-2 border-t border-neutral-200 space-y-3">
+                          <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                              <span className="font-mono text-[10px] bg-amber-200/70 text-amber-900 px-2 py-0.5 rounded font-bold">
-                                Sched: 1:00 PM · 20m Limit
+                              <h4 className="text-xs font-bold uppercase tracking-wider text-neutral-700">
+                                Previous Attendance History (Past 10 Days)
+                              </h4>
+                              <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded-full bg-neutral-200 text-neutral-700">
+                                {pastRecords.length} past records
                               </span>
-                              {record.lunchDurationFormatted && (
-                                <span className="font-mono font-black text-amber-950 bg-amber-200 px-2.5 py-0.5 rounded text-[11px] border border-amber-300">
-                                  Total: {record.lunchDurationFormatted}
-                                </span>
-                              )}
                             </div>
+
+                            <button
+                              type="button"
+                              onClick={() => setShowPastRecordsInDrawer((prev) => !prev)}
+                              className="px-3 py-1 rounded-lg text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 transition flex items-center gap-1"
+                            >
+                              <span>{showPastRecordsInDrawer ? 'Hide Past Days' : `Show Past Days (${pastRecords.length})`}</span>
+                              <ChevronRight className={`w-3.5 h-3.5 transition-transform ${showPastRecordsInDrawer ? 'rotate-90' : ''}`} />
+                            </button>
                           </div>
-                          {record.lunchBreaks && record.lunchBreaks.length > 0 ? (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-0.5 font-mono text-[11px]">
-                              {record.lunchBreaks.map((lb, idx) => {
-                                const sD = parseToValidDate(lb.startTime, record.date);
-                                const eD = parseToValidDate(lb.endTime, record.date);
-                                const isOngoing = !eD || lb.status === 'ONGOING';
-                                const sec = lb.durationSeconds || (sD && eD ? Math.max(0, Math.round((eD.getTime() - sD.getTime()) / 1000)) : 0);
-                                const isOverstay = sec > 1200;
-                                return (
-                                  <div key={idx} className={`p-2 rounded-lg border ${isOverstay ? 'bg-amber-100/70 border-amber-300' : 'bg-white border-amber-200'}`}>
-                                    <div className="flex items-center justify-between font-bold text-neutral-900">
-                                      <span>Lunch Break #{idx + 1}</span>
-                                      <span className={isOverstay ? 'text-amber-900' : 'text-emerald-800'}>
-                                        {formatDuration(lb.startTime, lb.endTime, record.date)}
-                                      </span>
-                                    </div>
-                                    <div className="text-[10px] text-neutral-600 mt-1 flex items-center justify-between">
-                                      <span>Start: {formatExactTime(lb.startTime, record.date)}</span>
-                                      <span>Return: {isOngoing ? 'Ongoing Break' : formatExactTime(lb.endTime, record.date)}</span>
-                                    </div>
-                                    <div className="mt-1 text-[10px] font-sans font-semibold">
-                                      {isOngoing ? (
-                                        <span className="text-amber-800 animate-pulse">⏳ Break In Progress</span>
-                                      ) : isOverstay ? (
-                                        <span className="text-amber-900">⚠️ Exceeded 20 min rule</span>
-                                      ) : (
-                                        <span className="text-emerald-700">✅ On time (Within 20m)</span>
-                                      )}
-                                    </div>
-                                  </div>
-                                );
-                              })}
+
+                          {showPastRecordsInDrawer && (
+                            <div className="space-y-4 pt-1">
+                              {pastRecords.map((r) => renderDaySection(r, false))}
                             </div>
-                          ) : null}
+                          )}
                         </div>
                       )}
-
-                      {/* Login and Logout Event Cards */}
-                      <div className="divide-y divide-neutral-100 p-3 space-y-3">
-                        {events.map((event, index) => {
-                          const parsedOut = parseToValidDate(event.logoutTime, record.date);
-                          const parsedIn = parseToValidDate(event.loginTime, record.date);
-                          const isSameAsLogin = Boolean(parsedIn && parsedOut && Math.abs(parsedOut.getTime() - parsedIn.getTime()) <= 3000);
-
-                          const hasLogout = Boolean(parsedOut && parsedOut.getFullYear() >= 2020 && !isSameAsLogin);
-
-                          const duration = hasLogout ? formatDuration(event.loginTime, event.logoutTime, record.date) : 'Currently Active';
-
-                          return (
-                            <div
-                              key={`${event.loginTime}-${index}`}
-                              className="rounded-lg border border-neutral-200 bg-neutral-50/60 p-3.5 space-y-3"
-                            >
-                              <div className="flex items-center justify-between text-xs">
-                                <span className="font-bold text-neutral-700 bg-neutral-200/80 px-2 py-0.5 rounded text-[11px]">
-                                  Session #{index + 1}
-                                </span>
-                                <span
-                                  className={`font-semibold px-2 py-0.5 rounded-full text-[10px] ${
-                                    hasLogout
-                                      ? 'bg-neutral-200 text-neutral-700'
-                                      : 'bg-emerald-100 text-emerald-800 border border-emerald-300 animate-pulse'
-                                  }`}
-                                >
-                                  {hasLogout ? `Duration: ${duration}` : '🟢 Currently Active'}
-                                </span>
-                              </div>
-
-                              {/* 2 Big Cards: Login Time & Logout Time */}
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                                {/* Login Card */}
-                                <div className="rounded-lg border border-emerald-200 bg-emerald-50/70 p-2.5">
-                                  <div className="flex items-center gap-1.5 text-emerald-800 text-[10px] font-bold uppercase tracking-wider">
-                                    <LogIn className="h-3.5 w-3.5 text-emerald-600" />
-                                    <span>Login / Check-in Time</span>
-                                  </div>
-                                  <div className="mt-1 text-base font-extrabold text-emerald-950 font-mono">
-                                    {formatExactTime(event.loginTime, record.date)}
-                                  </div>
-                                  <div className="text-[11px] text-emerald-700 mt-0.5">
-                                    {formatDateTime(event.loginTime, record.date)}
-                                  </div>
-                                </div>
-
-                                {/* Logout Card */}
-                                <div
-                                  className={`rounded-lg border p-2.5 ${
-                                    hasLogout
-                                      ? 'border-amber-200 bg-amber-50/70'
-                                      : 'border-blue-200 bg-blue-50/70'
-                                  }`}
-                                >
-                                  <div
-                                    className={`flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider ${
-                                      hasLogout ? 'text-amber-800' : 'text-blue-800'
-                                    }`}
-                                  >
-                                    <LogOut
-                                      className={`h-3.5 w-3.5 ${hasLogout ? 'text-amber-600' : 'text-blue-600'}`}
-                                    />
-                                    <span>Logout / Check-out Time</span>
-                                  </div>
-                                  <div
-                                    className={`mt-1 text-base font-extrabold font-mono ${
-                                      hasLogout ? 'text-amber-950' : 'text-blue-950'
-                                    }`}
-                                  >
-                                    {hasLogout ? formatExactTime(event.logoutTime, record.date) : 'Not Logged Out Yet'}
-                                  </div>
-                                  {hasLogout ? (
-                                    <>
-                                      <div className="text-[11px] text-amber-700 mt-0.5">
-                                        {formatDateTime(event.logoutTime!, record.date)}
-                                      </div>
-                                      <div className="mt-1.5 flex items-center gap-1.5">
-                                        {event.logoutBy === 'ADMIN' ? (
-                                          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-200 font-mono">
-                                            <Shield className="w-3 h-3 text-rose-600" />
-                                            <span>Admin {event.logoutAdminName ? `(${event.logoutAdminName})` : ''}</span>
-                                          </span>
-                                        ) : (
-                                          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200 font-mono">
-                                            <User className="w-3 h-3 text-blue-600" />
-                                            <span>Employee</span>
-                                          </span>
-                                        )}
-                                      </div>
-                                      {/* Away / Admin Logout Duration Detail */}
-                                      {event.logoutBy === 'ADMIN' && (
-                                        <div className="mt-2.5 p-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-950 text-xs space-y-1">
-                                          <div className="flex items-center justify-between">
-                                            <span className="font-bold flex items-center gap-1 text-amber-900">
-                                              <Clock className="w-3.5 h-3.5 text-amber-600" />
-                                              <span>Away / Logout Duration:</span>
-                                            </span>
-                                            {event.awayDurationFormatted ? (
-                                              <span className="font-mono font-black text-amber-950 bg-amber-100 px-2 py-0.5 rounded border border-amber-300">
-                                                ⏱️ {event.awayDurationFormatted}
-                                              </span>
-                                            ) : (
-                                              <span className="font-mono font-black text-rose-900 bg-rose-100 px-2 py-0.5 rounded border border-rose-300 animate-pulse">
-                                                ⏱️ <LiveAwayTimer startTime={event.logoutTime} />
-                                              </span>
-                                            )}
-                                          </div>
-                                          {event.reLoginTime && (
-                                            <div className="text-[11px] text-amber-800 flex items-center justify-between pt-1 border-t border-amber-200/60 font-medium">
-                                              <span>Re-login Check-in:</span>
-                                              <span className="font-mono">{formatDateTime(event.reLoginTime, record.date)}</span>
-                                            </div>
-                                          )}
-                                        </div>
-                                      )}
-                                    </>
-                                  ) : (
-                                    <div className="mt-1 flex items-center justify-between">
-                                      <span className="text-[11px] text-blue-700">🟢 Session active</span>
-                                      <button
-                                        onClick={() => handleForceLogout(record)}
-                                        disabled={loggingOutUserId === record.userId}
-                                        className="px-2 py-1 text-[10px] font-bold rounded bg-rose-600 hover:bg-rose-700 text-white transition-colors flex items-center gap-1 cursor-pointer"
-                                      >
-                                        <LogOut className="w-3 h-3" />
-                                        <span>Force Logout</span>
-                                      </button>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-
-                              {/* Technical Details: Source / GPS / IP */}
-                              {(event.ipAddress || event.userAgent) && (
-                                <div className="text-[10px] text-neutral-500 pt-1 border-t border-neutral-200/60 flex flex-wrap items-center gap-x-3 gap-y-1">
-                                  {event.ipAddress && (
-                                    <span>
-                                      <strong className="text-neutral-600">Source:</strong> {event.ipAddress}
-                                    </span>
-                                  )}
-                                  {event.userAgent && (
-                                    <span className="truncate max-w-full">
-                                      <strong className="text-neutral-600">Device/Note:</strong> {event.userAgent}
-                                    </span>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </section>
+                    </div>
                   );
-                })}
+                })()}
               </div>
             </div>
           );
