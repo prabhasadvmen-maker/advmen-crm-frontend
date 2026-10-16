@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useUIStore } from '@/stores/uiStore';
 import { WifiOff, Wifi, RefreshCw, X, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { ToastContainer } from '@/components/ui/ToastContainer';

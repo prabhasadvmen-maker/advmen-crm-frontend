@@ -11,6 +11,7 @@ import {
   departmentApi,
   DEFAULT_DEPARTMENTS,
   DEFAULT_DEPARTMENT_ROLES,
+  type DepartmentRoleItem,
 } from './api/departmentApi';
 import {
   Users,

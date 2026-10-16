@@ -12,7 +12,6 @@
  */
 
 import { useSessionStore } from '@/stores/sessionStore';
-import { useUIStore } from '@/stores/uiStore';
 
 export interface ApiSuccessResponse<T> {
   success: true;

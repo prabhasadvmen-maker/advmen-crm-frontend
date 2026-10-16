@@ -1,8 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { attendanceApi, AttendanceLunchBreak } from '@/features/admin/api/attendanceApi';
 import { useUIStore } from '@/stores/uiStore';
-import { Utensils, Clock, Check, Play, Pause, ChevronDown } from 'lucide-react';
-import { cn } from '@/utils/cn';
+import { Utensils, Check, Play, ChevronDown } from 'lucide-react';
 
 export function LunchBreakWidget() {
   const [isOnLunch, setIsOnLunch] = useState(false);
@@ -74,7 +73,7 @@ export function LunchBreakWidget() {
   const handleStartLunch = async () => {
     try {
       setIsLoading(true);
-      const res = await attendanceApi.startLunch();
+      await attendanceApi.startLunch();
       setIsOnLunch(true);
       const nowIso = new Date().toISOString();
       setCurrentLunchStart(nowIso);
@@ -100,7 +99,7 @@ export function LunchBreakWidget() {
   const handleEndLunch = async () => {
     try {
       setIsLoading(true);
-      const res = await attendanceApi.endLunch();
+      await attendanceApi.endLunch();
       setIsOnLunch(false);
       setCurrentLunchStart(null);
       setMenuOpen(false);
