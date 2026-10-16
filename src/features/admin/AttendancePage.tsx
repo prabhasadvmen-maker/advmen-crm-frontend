@@ -278,7 +278,7 @@ const getLoginEvents = (record: AttendanceRecord): AttendanceLoginEvent[] => {
     return val;
   };
 
-  const recLogout = sanitizeLogout(record.logoutTime, record.loginTime);
+  const recLogout = sanitizeLogout(record.logoutTime || (record as any).punchOut || (record as any).punchOutTime, record.loginTime);
 
   if (record.loginEvents?.length) {
     const events = record.loginEvents.map((e) => ({
@@ -625,7 +625,23 @@ export function AttendancePage() {
   const employees = useMemo(() => {
     const byUser = new Map<string, EmployeeMonthSummary>();
     for (const record of records) {
-      const existing = byUser.get(record.userId);
+      const cleanEmpId = (record.employeeId || (record as any).empId || '').trim();
+      const cleanUserId = (record.userId || '').trim();
+      const cleanName = (record.userName || (record as any).empName || (record as any).name || '').trim();
+
+      // Unique composite key ensures different employees never get merged into one bucket
+      let groupKey = '';
+      if (cleanEmpId && cleanEmpId.toUpperCase() !== 'EMP') {
+        groupKey = `empid_${cleanEmpId.toUpperCase()}`;
+      } else if (cleanUserId && !cleanUserId.startsWith('ext_EMP') && cleanUserId !== 'ext_') {
+        groupKey = `uid_${cleanUserId}`;
+      } else if (cleanName && cleanName.toLowerCase() !== 'employee') {
+        groupKey = `name_${cleanName.toLowerCase()}`;
+      } else {
+        groupKey = `rec_${record._id}`;
+      }
+
+      const existing = byUser.get(groupKey);
       const hasRealSelfie = Boolean(record.selfieUrl) && record.selfieUrl!.length > 10;
       if (existing) {
         existing.records.push(record);
@@ -634,10 +650,10 @@ export function AttendancePage() {
         }
         continue;
       }
-      byUser.set(record.userId, {
-        userId: record.userId,
-        employeeId: record.employeeId || (record as any).empId || 'EMP',
-        name: record.userName || (record as any).empName || (record as any).name || 'Employee',
+      byUser.set(groupKey, {
+        userId: record.userId || groupKey,
+        employeeId: cleanEmpId || 'EMP',
+        name: cleanName || 'Employee',
         email: record.userEmail,
         phone: record.userPhone,
         department: record.department,
@@ -647,7 +663,7 @@ export function AttendancePage() {
         loginCount: 0,
         logoutCount: 0,
         latestLogin: record.loginTime,
-        latestLogout: record.logoutTime,
+        latestLogout: record.logoutTime || (record as any).punchOut,
         latestSelfie: hasRealSelfie ? record.selfieUrl : undefined,
       });
     }
@@ -781,52 +797,101 @@ export function AttendancePage() {
   const handleOpenEmployeeDetails = useCallback(
     (record: AttendanceRecord | EmployeeMonthSummary) => {
       if ('records' in record && Array.isArray((record as EmployeeMonthSummary).records)) {
-        setSelectedEmployee(record as EmployeeMonthSummary);
-        return;
-      }
-      const rec = record as AttendanceRecord;
-      const found = employees.find(
-        (e) => e.userId === rec.userId || (rec.userName && (e.name || '').toLowerCase() === rec.userName.toLowerCase())
-      );
-      if (found) {
-        setSelectedEmployee(found);
-      } else {
-        const userRecords = records.filter(
-          (r) => r.userId === rec.userId || (rec.userName && (r.userName || '').toLowerCase() === rec.userName.toLowerCase())
-        );
-        const allEvents = userRecords.flatMap(getLoginEvents);
-        const logoutEvents = allEvents.filter(
-          (e) => Boolean(e.logoutTime) && String(e.logoutTime).toLowerCase() !== 'invalid date'
-        );
-        const latestLogout = logoutEvents.reduce(
-          (latest, event) => {
-            if (!event.logoutTime) return latest;
-            const curTime = parseToValidDate(event.logoutTime, userRecords[0]?.date)?.getTime() || 0;
-            const latTime = latest ? (parseToValidDate(latest, userRecords[0]?.date)?.getTime() || 0) : 0;
-            return curTime > latTime ? event.logoutTime : latest;
-          },
-          undefined as string | undefined
-        );
+        const empSummary = record as EmployeeMonthSummary;
+        const targetEmpId = (empSummary.employeeId || '').trim().toLowerCase();
+        const targetName = (empSummary.name || '').trim().toLowerCase();
+        const targetUserId = (empSummary.userId || '').trim();
+
+        // Strict filter to guarantee no other employee's records leak in
+        const strictRecords = empSummary.records.filter((r) => {
+          const rEmpId = (r.employeeId || (r as any).empId || '').trim().toLowerCase();
+          const rUserId = (r.userId || '').trim();
+          const rName = (r.userName || (r as any).empName || (r as any).name || '').trim().toLowerCase();
+          if (targetEmpId && targetEmpId !== 'emp' && rEmpId && rEmpId !== 'emp') {
+            return targetEmpId === rEmpId;
+          }
+          if (targetUserId && rUserId && !targetUserId.startsWith('ext_') && !rUserId.startsWith('ext_')) {
+            return targetUserId === rUserId;
+          }
+          if (targetName && rName) {
+            return targetName === rName;
+          }
+          return false;
+        });
 
         setSelectedEmployee({
-          userId: rec.userId,
-          employeeId: rec.employeeId,
-          name: rec.userName,
-          email: rec.userEmail,
-          phone: rec.userPhone,
-          department: rec.department,
-          role: rec.role,
-          records: userRecords.sort((a, b) => (b.date || '').localeCompare(a.date || '')),
-          daysPresent: new Set(userRecords.map((r) => r.date)).size || 1,
-          loginCount: allEvents.length || 1,
-          logoutCount: logoutEvents.length,
-          latestLogin: rec.loginTime,
-          latestLogout,
-          latestSelfie: rec.selfieUrl,
+          ...empSummary,
+          records: strictRecords.length > 0 ? strictRecords : empSummary.records,
         });
+        return;
       }
+
+      const rec = record as AttendanceRecord;
+      const targetEmpId = (rec.employeeId || (rec as any).empId || '').trim().toLowerCase();
+      const targetUserId = (rec.userId || '').trim();
+      const targetName = (rec.userName || (rec as any).empName || (rec as any).name || '').trim().toLowerCase();
+
+      // STRICT ISOLATION: match ONLY records belonging to THIS specific clicked employee
+      const userRecords = records.filter((r) => {
+        const rEmpId = (r.employeeId || (r as any).empId || '').trim().toLowerCase();
+        const rUserId = (r.userId || '').trim();
+        const rName = (r.userName || (r as any).empName || (r as any).name || '').trim().toLowerCase();
+
+        // 1. Exact employeeId match (highest priority, prevents cross-contamination between same-name staff)
+        if (targetEmpId && targetEmpId !== 'emp' && rEmpId && rEmpId !== 'emp') {
+          return targetEmpId === rEmpId;
+        }
+        // 2. Exact non-generic userId match
+        if (targetUserId && rUserId && !targetUserId.startsWith('ext_') && !rUserId.startsWith('ext_')) {
+          return targetUserId === rUserId;
+        }
+        // 3. Fallback: exact employee name match
+        if (targetName && rName) {
+          return targetName === rName;
+        }
+        return false;
+      });
+
+      const allEvents = userRecords.flatMap(getLoginEvents);
+      const logoutEvents = allEvents.filter(
+        (e) => Boolean(e.logoutTime) && String(e.logoutTime).toLowerCase() !== 'invalid date'
+      );
+      const latestLogout = logoutEvents.reduce(
+        (latest, event) => {
+          if (!event.logoutTime) return latest;
+          const curTime = parseToValidDate(event.logoutTime, userRecords[0]?.date)?.getTime() || 0;
+          const latTime = latest ? (parseToValidDate(latest, userRecords[0]?.date)?.getTime() || 0) : 0;
+          return curTime > latTime ? event.logoutTime : latest;
+        },
+        undefined as string | undefined
+      );
+
+      const bestSelfie = userRecords.find(
+        (r) => Boolean(r.selfieUrl) && r.selfieUrl!.length > 10
+      )?.selfieUrl || rec.selfieUrl;
+
+      setSelectedEmployee({
+        userId: rec.userId || targetEmpId || targetName,
+        employeeId: rec.employeeId || (rec as any).empId || 'EMP',
+        name: rec.userName || (rec as any).empName || (rec as any).name || 'Employee',
+        email: rec.userEmail,
+        phone: rec.userPhone,
+        department: rec.department,
+        role: rec.role,
+        records: userRecords.sort((a, b) => {
+          const timeA = parseToValidDate(a.loginTime, a.date)?.getTime() || 0;
+          const timeB = parseToValidDate(b.loginTime, b.date)?.getTime() || 0;
+          return timeB - timeA;
+        }),
+        daysPresent: new Set(userRecords.map((r) => r.date)).size || 1,
+        loginCount: allEvents.length || 1,
+        logoutCount: logoutEvents.length,
+        latestLogin: rec.loginTime,
+        latestLogout,
+        latestSelfie: bestSelfie,
+      });
     },
-    [employees, records]
+    [records]
   );
 
   useEffect(() => {
@@ -1328,86 +1393,92 @@ export function AttendancePage() {
 
                       {/* Logout Timing & Away Duration Timer */}
                       <td className="px-4 py-3.5 whitespace-nowrap">
-                        {record.logoutTime &&
-                        String(record.logoutTime).toLowerCase() !== 'invalid date' &&
-                        (() => {
-                          const logD = parseToValidDate(record.loginTime, record.date);
-                          const outD = parseToValidDate(record.logoutTime, record.date);
-                          return !logD || !outD || Math.abs(outD.getTime() - logD.getTime()) > 3000;
-                        })() ? (
-                          <div className="flex flex-col gap-1 items-start">
-                            <div className="inline-flex items-center gap-1.5 font-mono font-bold text-xs text-amber-900 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200/80 shadow-2xs">
-                              <LogOut className="h-3.5 w-3.5 text-amber-600 shrink-0" />
-                              <span>{formatExactTime(record.logoutTime, record.date)}</span>
-                            </div>
-                            {record.logoutBy === 'ADMIN' ? (
-                              <div className="flex flex-col gap-1 items-start">
-                                <span
-                                  className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-200 font-mono shadow-2xs"
-                                  title={`Remotely punched out by ${record.adminLogoutBy || record.logoutAdminName || 'Admin'}`}
-                                >
-                                  <Shield className="w-3 h-3 text-rose-600 shrink-0" />
-                                  <span>Admin {record.adminLogoutBy || record.logoutAdminName ? `(${record.adminLogoutBy || record.logoutAdminName})` : ''}</span>
-                                </span>
-                                {(record.isAwayPending || !record.adminLogoutReLoginAt) && (
-                                  <span
-                                    className="inline-flex items-center gap-1.5 text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-300 font-mono animate-pulse"
-                                    title="Timer active: calculating time until employee logs in again"
-                                  >
-                                    <Clock className="w-3 h-3 text-amber-700 animate-spin" />
-                                    <span>Away: <LiveAwayTimer startTime={record.adminLogoutAt || record.logoutTime} /></span>
-                                  </span>
-                                )}
+                        {(() => {
+                          const rawLogout = record.logoutTime || (record as any).punchOut || (record as any).punchOutTime;
+                          const hasValidLogout = rawLogout &&
+                            String(rawLogout).toLowerCase() !== 'invalid date' &&
+                            String(rawLogout).toLowerCase() !== 'null' &&
+                            (() => {
+                              const logD = parseToValidDate(record.loginTime, record.date);
+                              const outD = parseToValidDate(rawLogout, record.date);
+                              return !logD || !outD || Math.abs(outD.getTime() - logD.getTime()) > 3000;
+                            })();
+
+                          return hasValidLogout ? (
+                            <div className="flex flex-col gap-1 items-start">
+                              <div className="inline-flex items-center gap-1.5 font-mono font-bold text-xs text-amber-900 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200/80 shadow-2xs">
+                                <LogOut className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                                <span>{formatExactTime(rawLogout, record.date)}</span>
                               </div>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200 font-mono shadow-2xs">
-                                <User className="w-3 h-3 text-blue-600 shrink-0" />
-                                <span>Employee</span>
-                              </span>
-                            )}
-                          </div>
-                        ) : (
-                          <div className="flex flex-col gap-1 items-start">
-                            <div className="flex items-center gap-2">
-                              <span className="inline-flex items-center gap-1.5 font-semibold text-xs text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
-                                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                                <span>Active</span>
-                              </span>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleForceLogout(record);
-                                }}
-                                disabled={loggingOutUserId === record.userId}
-                                className="px-2.5 py-1 text-xs font-bold rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 transition shadow-2xs flex items-center gap-1 cursor-pointer disabled:opacity-50"
-                                title="Remotely logout employee & record attendance punch-out as Admin"
-                              >
-                                {loggingOutUserId === record.userId ? (
-                                  <RefreshCw className="w-3.5 h-3.5 animate-spin text-rose-600" />
-                                ) : (
-                                  <LogOut className="w-3.5 h-3.5 text-rose-600" />
-                                )}
-                                <span>Logout</span>
-                              </button>
+                              {record.logoutBy === 'ADMIN' ? (
+                                <div className="flex flex-col gap-1 items-start">
+                                  <span
+                                    className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-200 font-mono shadow-2xs"
+                                    title={`Remotely punched out by ${record.adminLogoutBy || record.logoutAdminName || 'Admin'}`}
+                                  >
+                                    <Shield className="w-3 h-3 text-rose-600 shrink-0" />
+                                    <span>Admin {record.adminLogoutBy || record.logoutAdminName ? `(${record.adminLogoutBy || record.logoutAdminName})` : ''}</span>
+                                  </span>
+                                  {(record.isAwayPending || !record.adminLogoutReLoginAt) && (
+                                    <span
+                                      className="inline-flex items-center gap-1.5 text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-300 font-mono animate-pulse"
+                                      title="Timer active: calculating time until employee logs in again"
+                                    >
+                                      <Clock className="w-3 h-3 text-amber-700 animate-spin" />
+                                      <span>Away: <LiveAwayTimer startTime={record.adminLogoutAt || rawLogout} /></span>
+                                    </span>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200 font-mono shadow-2xs">
+                                  <User className="w-3 h-3 text-blue-600 shrink-0" />
+                                  <span>Employee</span>
+                                </span>
+                              )}
                             </div>
-                            {Boolean(record.totalAwayDurationSeconds || record.awayDurationFormatted) && (
-                              <span
-                                className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-50 text-amber-900 border border-amber-300 font-mono shadow-2xs"
-                                title={`Total away duration recorded during Admin Logout: ${record.awayDurationFormatted}`}
-                              >
-                                <Clock className="w-3 h-3 text-amber-600" />
-                                <span>Away Time: {record.awayDurationFormatted}</span>
-                              </span>
-                            )}
-                          </div>
-                        )}
+                          ) : (
+                            <div className="flex flex-col gap-1 items-start">
+                              <div className="flex items-center gap-2">
+                                <span className="inline-flex items-center gap-1.5 font-semibold text-xs text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
+                                  <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                                  <span>Active</span>
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleForceLogout(record);
+                                  }}
+                                  disabled={loggingOutUserId === record.userId}
+                                  className="px-2.5 py-1 text-xs font-bold rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 transition shadow-2xs flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                                  title="Remotely logout employee & record attendance punch-out as Admin"
+                                >
+                                  {loggingOutUserId === record.userId ? (
+                                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-rose-600" />
+                                  ) : (
+                                    <LogOut className="w-3.5 h-3.5 text-rose-600" />
+                                  )}
+                                  <span>Logout</span>
+                                </button>
+                              </div>
+                              {Boolean(record.totalAwayDurationSeconds || record.awayDurationFormatted) && (
+                                <span
+                                  className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-50 text-amber-900 border border-amber-300 font-mono shadow-2xs"
+                                  title={`Total away duration recorded during Admin Logout: ${record.awayDurationFormatted}`}
+                                >
+                                  <Clock className="w-3 h-3 text-amber-600" />
+                                  <span>Away Time: {record.awayDurationFormatted}</span>
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </td>
 
                       {/* Duration */}
                       <td className="px-4 py-3.5 whitespace-nowrap">
                         <span className="font-mono text-xs font-semibold text-neutral-800 bg-neutral-100 px-2.5 py-1 rounded-md border border-neutral-200 shadow-2xs">
-                          {formatDuration(record.loginTime, record.logoutTime, record.date)}
+                          {formatDuration(record.loginTime, record.logoutTime || (record as any).punchOut, record.date)}
                         </span>
                       </td>
 
