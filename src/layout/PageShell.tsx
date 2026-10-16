@@ -3,7 +3,6 @@ import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { TopBar } from './TopBar';
 import { CommandBar } from '@/components/patterns/CommandBar';
-import { ToastContainer } from '@/components/ui/ToastContainer';
 import { useUIStore } from '@/stores/uiStore';
 import { useSessionStore } from '@/stores/sessionStore';
 import { useRealtimeEvents } from '@/hooks/useRealtimeEvents';
@@ -85,7 +84,6 @@ export function PageShell({ children, loginRedirectPath }: PageShellProps) {
   return (
     <div className="min-h-screen bg-neutral-50 flex flex-col font-sans text-neutral-900">
       <CommandBar />
-      <ToastContainer />
       <Sidebar />
 
       <div
@@ -133,7 +131,12 @@ export function PageShell({ children, loginRedirectPath }: PageShellProps) {
         )}
 
         <TopBar />
-        <main className="flex-1 p-fib-13 sm:p-fib-21 max-w-7xl w-full mx-auto space-y-fib-21">
+        <main
+          className={cn(
+            'flex-1 p-fib-13 sm:p-fib-21 w-full space-y-fib-21 transition-all duration-300',
+            sidebarCollapsed ? 'max-w-none px-4 sm:px-8' : 'max-w-7xl mx-auto'
+          )}
+        >
           {children ?? <Outlet />}
         </main>
       </div>

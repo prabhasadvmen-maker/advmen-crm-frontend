@@ -12,6 +12,7 @@
  */
 
 import { useSessionStore } from '@/stores/sessionStore';
+import { useUIStore } from '@/stores/uiStore';
 
 export interface ApiSuccessResponse<T> {
   success: true;
@@ -367,6 +368,13 @@ export async function request<T>(
       const details = errorData?.error?.details || errorData?.details;
       const requestId = errorData?.error?.requestId || errorData?.requestId;
 
+      if (response.status >= 502 && response.status <= 504) {
+        notifyNetworkIssue(
+          `Server unavailable (${response.status}: ${response.statusText || 'Gateway Error'}). Kripya server status ya internet check karein.`,
+          `HTTP ${response.status}`
+        );
+      }
+
       throw new ApiError(message, response.status, code, details, requestId);
     }
 
@@ -391,13 +399,61 @@ export async function request<T>(
     return data as T;
   } catch (error) {
     if (error instanceof ApiError) {
+      if (
+        error.status === 0 ||
+        error.code === 'NETWORK_DISCONNECTED' ||
+        (error.status >= 502 && error.status <= 504)
+      ) {
+        notifyNetworkIssue(error.message, `Status: ${error.status || 'Offline'}`);
+      }
       throw error;
     }
+
+    const rawMsg = error instanceof Error ? error.message : 'Network communication error';
+    const isActuallyOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+    const netMessage = isActuallyOffline
+      ? 'Aapka internet connection band hai. Kripya Wi-Fi ya mobile data check karein.'
+      : 'Backend server se sampark nahi ho pa raha hai (Connection Refused). Server ya network check karein.';
+
+    notifyNetworkIssue(netMessage, rawMsg);
+
     // Network failure / Offline / Subnet unreachable
     throw new ApiError(
-      error instanceof Error ? error.message : 'Network communication error',
+      netMessage,
       0,
       'NETWORK_DISCONNECTED'
+    );
+  }
+}
+
+let lastNetworkNotificationTime = 0;
+
+/**
+ * Dispatches a global event for dedicated network notifications across the UI.
+ * Debounced to at most once per 3.5s to prevent notification floods on mass request failures.
+ */
+export function notifyNetworkIssue(customMessage?: string, details?: string): void {
+  const now = Date.now();
+  if (now - lastNetworkNotificationTime < 3500) return;
+  lastNetworkNotificationTime = now;
+
+  if (typeof window !== 'undefined') {
+    const isActuallyOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+    const message =
+      customMessage ||
+      (isActuallyOffline
+        ? 'Aapka internet connection band hai. Kripya apna Wi-Fi ya mobile data check karein.'
+        : 'Backend server se connection toot gaya hai ya server unreachable hai.');
+
+    window.dispatchEvent(
+      new CustomEvent('app:network-issue', {
+        detail: {
+          message,
+          details: details || (isActuallyOffline ? 'Device is Offline' : 'Server Unreachable'),
+          timestamp: now,
+          isOffline: isActuallyOffline,
+        },
+      })
     );
   }
 }

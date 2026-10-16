@@ -24,8 +24,13 @@ import {
   Shield,
   User,
   Trash2,
+  Utensils,
+  FileText,
 } from 'lucide-react';
 import { useUIStore } from '@/stores/uiStore';
+import { EmployeeMonthlyHistoryView } from './EmployeeMonthlyHistoryView';
+import { WorkReportsTableView } from '../reports/WorkReportsTableView';
+import { usersApi, UserDto } from './api/usersApi';
 
 
 interface EmployeeMonthSummary {
@@ -50,14 +55,147 @@ function currentMonthValue(): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 }
 
+function resolveSelfieUrl(url?: string): string {
+  if (!url) return '';
+  if (url.startsWith('data:image')) {
+    return url;
+  }
+  if (url.includes('atendence-crm.vercel.app')) {
+    // Avoid blocking requests to external Vercel server which hangs
+    return '';
+  }
+  if (url.startsWith('/api/')) {
+    const apiBase = (import.meta as any).env?.VITE_API_BASE_URL || '';
+    if (apiBase && typeof apiBase === 'string' && apiBase.startsWith('http')) {
+      try {
+        const origin = new URL(apiBase).origin;
+        return `${origin}${url}`;
+      } catch {}
+    }
+    return url;
+  }
+  return url;
+}
+
+interface EmployeeAvatarBadgeProps {
+  name: string;
+  employeeId?: string;
+  userId?: string;
+  avatarUrl?: string;
+  selfieUrl?: string;
+  isActive?: boolean;
+  isOnLunch?: boolean;
+  onSelfieClick?: () => void;
+}
+
+function getInitials(name?: string, fallback = 'U'): string {
+  if (!name || !name.trim()) return fallback;
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 1) {
+    return parts[0].substring(0, 2).toUpperCase();
+  }
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+function getGradientFromName(name?: string): string {
+  const gradients = [
+    'from-indigo-600 to-blue-700 text-white',
+    'from-emerald-600 to-teal-700 text-white',
+    'from-violet-600 to-purple-800 text-white',
+    'from-amber-500 to-orange-600 text-white',
+    'from-rose-500 to-pink-700 text-white',
+    'from-cyan-600 to-blue-800 text-white',
+    'from-teal-600 to-emerald-800 text-white',
+    'from-fuchsia-600 to-rose-700 text-white',
+  ];
+  if (!name) return gradients[0];
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = (hash << 5) - hash + name.charCodeAt(i);
+    hash |= 0;
+  }
+  const idx = Math.abs(hash) % gradients.length;
+  return gradients[idx];
+}
+
+export function EmployeeAvatarBadge({
+  name,
+  employeeId,
+  avatarUrl,
+  selfieUrl,
+  isActive = false,
+  isOnLunch = false,
+  onSelfieClick,
+}: EmployeeAvatarBadgeProps) {
+  const [imgFailed, setImgFailed] = useState(false);
+  const initials = getInitials(name);
+  const gradient = getGradientFromName(name || employeeId);
+
+  const cleanSelfie = resolveSelfieUrl(selfieUrl);
+  const cleanAvatar = resolveSelfieUrl(avatarUrl);
+  const candidateUrl = cleanSelfie || cleanAvatar;
+
+  const hasImage = Boolean(candidateUrl && !imgFailed);
+
+  return (
+    <div className="relative shrink-0 group/avatar">
+      <div
+        onClick={hasImage && onSelfieClick ? onSelfieClick : undefined}
+        className={`relative h-11 w-11 rounded-xl overflow-hidden shadow-sm transition-all duration-200 border-2 ${
+          isActive
+            ? 'border-emerald-500 ring-2 ring-emerald-100'
+            : isOnLunch
+            ? 'border-amber-400 ring-2 ring-amber-100'
+            : 'border-slate-200'
+        } ${onSelfieClick && hasImage ? 'cursor-pointer hover:scale-105' : ''}`}
+        title={hasImage && onSelfieClick ? `Click to view selfie for ${name}` : name}
+      >
+        {hasImage ? (
+          <>
+            <img
+              src={candidateUrl}
+              alt={name}
+              className="h-full w-full object-cover"
+              loading="lazy"
+              onError={() => setImgFailed(true)}
+            />
+            {onSelfieClick && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover/avatar:opacity-100 transition-opacity">
+                <Camera className="h-4 w-4 text-white" />
+              </div>
+            )}
+          </>
+        ) : (
+          <div className={`h-full w-full bg-gradient-to-br ${gradient} flex items-center justify-center font-bold text-xs tracking-wider shadow-inner select-none`}>
+            {initials}
+          </div>
+        )}
+      </div>
+
+      {/* Real-time status indicator dot */}
+      <span
+        className={`absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-white ${
+          isActive
+            ? 'bg-emerald-500 ring-1 ring-emerald-500/30'
+            : isOnLunch
+            ? 'bg-amber-500 ring-1 ring-amber-500/30'
+            : 'bg-slate-300'
+        }`}
+        title={isActive ? 'Active Now' : isOnLunch ? 'On Lunch' : 'Concluded'}
+      />
+    </div>
+  );
+}
+
 function parseToValidDate(value?: any, fallbackDateStr?: string): Date | null {
   if (!value) return null;
   if (value instanceof Date) {
-    return isNaN(value.getTime()) ? null : value;
+    return isNaN(value.getTime()) || value.getFullYear() < 2020 ? null : value;
   }
   const str = String(value).trim();
   if (
     !str ||
+    str === '0' ||
     str.toLowerCase() === 'null' ||
     str.toLowerCase() === 'undefined' ||
     str.toLowerCase() === 'invalid date'
@@ -67,7 +205,7 @@ function parseToValidDate(value?: any, fallbackDateStr?: string): Date | null {
 
   // 1. Direct standard parse (e.g. ISO string "2026-10-04T08:47:09.752Z")
   const directDate = new Date(str);
-  if (!isNaN(directDate.getTime())) {
+  if (!isNaN(directDate.getTime()) && directDate.getFullYear() >= 2020) {
     return directDate;
   }
 
@@ -99,7 +237,7 @@ function parseToValidDate(value?: any, fallbackDateStr?: string): Date | null {
     }
 
     const d = new Date(baseYear, baseMonth, baseDay, hours, minutes, seconds);
-    return isNaN(d.getTime()) ? null : d;
+    return !isNaN(d.getTime()) && d.getFullYear() >= 2020 ? d : null;
   }
 
   // 3. Check for "DD/MM/YYYY hh:mm:ss am/pm"
@@ -117,7 +255,7 @@ function parseToValidDate(value?: any, fallbackDateStr?: string): Date | null {
     if (ampm === 'am' && hours === 12) hours = 0;
 
     const d = new Date(year, month, day, hours, minutes, seconds);
-    return isNaN(d.getTime()) ? null : d;
+    return !isNaN(d.getTime()) && d.getFullYear() >= 2020 ? d : null;
   }
 
   return null;
@@ -268,19 +406,28 @@ function LiveAwayTimer({ startTime }: { startTime?: any }) {
 }
 
 export function AttendancePage() {
-  const [activeTab, setActiveTab] = useState<'punches' | 'summary'>('punches');
+  const [activeTab, setActiveTab] = useState<'punches' | 'monthly-history' | 'summary' | 'work-reports'>('punches');
   const [month, setMonth] = useState(currentMonthValue);
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
+  const [systemUsers, setSystemUsers] = useState<UserDto[]>([]);
+  const [selectedEmployeeForMonth, setSelectedEmployeeForMonth] = useState<string>('');
   const [selectedEmployee, setSelectedEmployee] = useState<EmployeeMonthSummary | null>(null);
   const [previewSelfie, setPreviewSelfie] = useState<{ url: string; name: string; time: string; location?: string } | null>(null);
   const [searchParams] = useSearchParams();
   const urlSearch = searchParams.get('search') || '';
   const [searchQuery, setSearchQuery] = useState(urlSearch);
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const [dateFilterMode, setDateFilterMode] = useState<'today' | 'month' | 'all' | 'custom'>('today');
+  const [customDate, setCustomDate] = useState(() => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()));
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+  const [totalRecords, setTotalRecords] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
   const [error, setError] = useState('');
+  const [isShowingRecentFallback, setIsShowingRecentFallback] = useState(false);
   const [loggingOutUserId, setLoggingOutUserId] = useState<string | null>(null);
   const [isClearModalOpen, setIsClearModalOpen] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
@@ -291,25 +438,81 @@ export function AttendancePage() {
     setIsLoading(true);
     setError('');
     try {
-      const response = activeTab === 'summary'
-        ? await (async () => {
-            const [year, monthNumber] = month.split('-').map(Number);
-            const lastDay = new Date(year, monthNumber, 0).getDate();
-            return attendanceApi.getAttendance(`${month}-01`, `${month}-${String(lastDay).padStart(2, '0')}`);
-          })()
-        : await attendanceApi.getAttendance();
+      const todayDateStr = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Kolkata',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).format(new Date());
 
-      setRecords(response.records || []);
+      let queryOptions: any = {
+        page: currentPage,
+        limit: pageSize,
+      };
+
+      if (activeTab === 'summary') {
+        const [year, monthNumber] = month.split('-').map(Number);
+        const lastDay = new Date(year, monthNumber, 0).getDate();
+        queryOptions.startDate = `${month}-01`;
+        queryOptions.endDate = `${month}-${String(lastDay).padStart(2, '0')}`;
+      } else {
+        if (dateFilterMode === 'today') {
+          queryOptions.date = todayDateStr;
+        } else if (dateFilterMode === 'month') {
+          const [curY, curM] = todayDateStr.split('-');
+          const lastDay = new Date(Number(curY), Number(curM), 0).getDate();
+          queryOptions.startDate = `${curY}-${curM}-01`;
+          queryOptions.endDate = `${curY}-${curM}-${String(lastDay).padStart(2, '0')}`;
+        } else if (dateFilterMode === 'custom') {
+          queryOptions.date = customDate;
+        } else if (dateFilterMode === 'all') {
+          queryOptions.date = 'ALL';
+        }
+      }
+
+      const response = await attendanceApi.getAttendance(queryOptions);
+
+      let fetchedRecords = response.records || [];
+      let isFallback = false;
+
+      // If Today was selected but Today has 0 punches yet (e.g. before 10 AM shift start or past midnight),
+      // seamlessly load all recent records so the admin immediately sees the staff attendance data!
+      if (dateFilterMode === 'today' && fetchedRecords.length === 0) {
+        try {
+          const fallbackResp = await attendanceApi.getAttendance({
+            page: 1,
+            limit: pageSize,
+            date: 'ALL',
+          });
+          if (fallbackResp.records && fallbackResp.records.length > 0) {
+            fetchedRecords = fallbackResp.records;
+            isFallback = true;
+          }
+        } catch {
+          // ignore fallback error
+        }
+      }
+
+      setIsShowingRecentFallback(isFallback);
+      setRecords(fetchedRecords);
+      setTotalRecords(isFallback ? fetchedRecords.length : (response.total || fetchedRecords.length));
+      setTotalPages(Math.max(1, Math.ceil((isFallback ? fetchedRecords.length : (response.total || fetchedRecords.length)) / pageSize)));
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Could not load employee attendance.');
     } finally {
       setIsLoading(false);
     }
-  }, [activeTab, month]);
+  }, [activeTab, month, dateFilterMode, customDate, currentPage, pageSize]);
 
   useEffect(() => {
     void loadAttendance();
   }, [loadAttendance]);
+
+  useEffect(() => {
+    usersApi.getUsers().then((users) => {
+      if (Array.isArray(users)) setSystemUsers(users);
+    }).catch(() => {});
+  }, []);
 
   const handleSyncNow = async () => {
     setIsSyncing(true);
@@ -403,10 +606,10 @@ export function AttendancePage() {
     const byUser = new Map<string, EmployeeMonthSummary>();
     for (const record of records) {
       const existing = byUser.get(record.userId);
-      const hasRealSelfie = Boolean(record.selfieUrl) && record.selfieUrl!.length > 30;
+      const hasRealSelfie = Boolean(record.selfieUrl) && record.selfieUrl!.length > 10;
       if (existing) {
         existing.records.push(record);
-        if ((!existing.latestSelfie || existing.latestSelfie.length < 30) && hasRealSelfie) {
+        if ((!existing.latestSelfie || existing.latestSelfie.length < 10) && hasRealSelfie) {
           existing.latestSelfie = record.selfieUrl;
         }
         continue;
@@ -452,7 +655,7 @@ export function AttendancePage() {
 
         // Find the most recent non-empty real camera selfie from any record
         const bestSelfie = employee.records.find(
-          (r) => Boolean(r.selfieUrl) && r.selfieUrl!.length > 30
+          (r) => Boolean(r.selfieUrl) && r.selfieUrl!.length > 10
         )?.selfieUrl;
 
         return {
@@ -480,9 +683,66 @@ export function AttendancePage() {
       .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
   }, [records]);
 
-  // Filtered punch records for the live feed
+  const availableEmployeesForHistory = useMemo(() => {
+    const map = new Map<
+      string,
+      {
+        userId: string;
+        name: string;
+        email: string;
+        employeeId?: string;
+        department?: string;
+        role?: string;
+        avatarUrl?: string;
+        latestSelfie?: string;
+      }
+    >();
+    for (const emp of employees) {
+      map.set(emp.userId, {
+        userId: emp.userId,
+        name: emp.name,
+        email: emp.email,
+        employeeId: emp.employeeId,
+        department: emp.department,
+        role: emp.role,
+        latestSelfie: emp.latestSelfie,
+      });
+    }
+    for (const u of systemUsers) {
+      const existing = map.get(u.id);
+      if (!existing) {
+        map.set(u.id, {
+          userId: u.id,
+          name: u.name,
+          email: u.email,
+          employeeId: u.employeeId,
+          department: u.department,
+          role: u.role,
+          avatarUrl: u.avatarUrl,
+        });
+      } else {
+        if (!existing.avatarUrl) existing.avatarUrl = u.avatarUrl;
+        if (!existing.employeeId) existing.employeeId = u.employeeId;
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  }, [employees, systemUsers]);
+
+  const handleOpenEmployeeMonthlyHistory = (userId: string) => {
+    setSelectedEmployeeForMonth(userId);
+    setActiveTab('monthly-history');
+  };
+
+  // Filtered punch records for the live feed - guarantees single row per employee per day
   const filteredPunchRecords = useMemo(() => {
-    return records.filter((r) => {
+    const seen = new Set<string>();
+    const unique: AttendanceRecord[] = [];
+
+    for (const r of records) {
+      const key = `${r.userId || r.employeeId || r.userName}_${r.date}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
       const matchesSearch =
         !searchQuery.trim() ||
         (r.userName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -490,8 +750,12 @@ export function AttendancePage() {
         (r.location?.address || '').toLowerCase().includes(searchQuery.toLowerCase());
 
       const matchesStatus = statusFilter === 'ALL' || r.status === statusFilter;
-      return matchesSearch && matchesStatus;
-    });
+      if (matchesSearch && matchesStatus) {
+        unique.push(r);
+      }
+    }
+
+    return unique;
   }, [records, searchQuery, statusFilter]);
 
   const handleOpenEmployeeDetails = useCallback(
@@ -647,7 +911,7 @@ export function AttendancePage() {
         <WidgetBoundary name="attendance-employees">
           <KPICard
             label="Employees Active"
-            value={employees.length}
+            value={availableEmployeesForHistory.length || employees.length}
             subtext="Tracked roster staff"
             accent="blue"
             icon={<Users className="h-4 w-4 text-blue-600" />}
@@ -705,6 +969,21 @@ export function AttendancePage() {
           </button>
 
           <button
+            onClick={() => setActiveTab('monthly-history')}
+            className={`flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-semibold transition-colors ${
+              activeTab === 'monthly-history'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-neutral-500 hover:text-neutral-800'
+            }`}
+          >
+            <Utensils className="h-4 w-4 text-amber-600" />
+            <span>Employee Full History & Lunch (मासिक व लंच इतिहास)</span>
+            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800 font-bold">
+              Full Month
+            </span>
+          </button>
+
+          <button
             onClick={() => setActiveTab('summary')}
             className={`flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-semibold transition-colors ${
               activeTab === 'summary'
@@ -718,10 +997,97 @@ export function AttendancePage() {
               {employees.length}
             </span>
           </button>
+
+          <button
+            onClick={() => setActiveTab('work-reports')}
+            className={`flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-semibold transition-colors ${
+              activeTab === 'work-reports'
+                ? 'border-indigo-600 text-indigo-600'
+                : 'border-transparent text-neutral-500 hover:text-neutral-800'
+            }`}
+          >
+            <FileText className="h-4 w-4 text-indigo-600" />
+            <span>Daily Work Reports (दैनिक कार्य रिपोर्ट)</span>
+            <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-xs text-indigo-800 font-bold">
+              Reports DB
+            </span>
+          </button>
         </div>
 
         {activeTab === 'punches' && (
-          <div className="flex items-center gap-2 pb-2">
+          <div className="flex flex-wrap items-center gap-2 pb-2">
+            {/* Quick Date Range Filter */}
+            <div className="flex items-center rounded-lg border border-neutral-200 bg-neutral-100 p-0.5 text-xs font-semibold">
+              <button
+                type="button"
+                onClick={() => {
+                  setDateFilterMode('today');
+                  setCurrentPage(1);
+                }}
+                className={`px-2.5 py-1 rounded-md transition ${
+                  dateFilterMode === 'today'
+                    ? 'bg-white text-blue-700 shadow-2xs font-bold'
+                    : 'text-neutral-600 hover:text-neutral-900'
+                }`}
+              >
+                Today (आज)
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setDateFilterMode('month');
+                  setCurrentPage(1);
+                }}
+                className={`px-2.5 py-1 rounded-md transition ${
+                  dateFilterMode === 'month'
+                    ? 'bg-white text-blue-700 shadow-2xs font-bold'
+                    : 'text-neutral-600 hover:text-neutral-900'
+                }`}
+              >
+                This Month
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setDateFilterMode('all');
+                  setCurrentPage(1);
+                }}
+                className={`px-2.5 py-1 rounded-md transition ${
+                  dateFilterMode === 'all'
+                    ? 'bg-white text-blue-700 shadow-2xs font-bold'
+                    : 'text-neutral-600 hover:text-neutral-900'
+                }`}
+              >
+                All Records
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setDateFilterMode('custom');
+                  setCurrentPage(1);
+                }}
+                className={`px-2.5 py-1 rounded-md transition ${
+                  dateFilterMode === 'custom'
+                    ? 'bg-white text-blue-700 shadow-2xs font-bold'
+                    : 'text-neutral-600 hover:text-neutral-900'
+                }`}
+              >
+                Pick Date
+              </button>
+            </div>
+
+            {dateFilterMode === 'custom' && (
+              <input
+                type="date"
+                value={customDate}
+                onChange={(e) => {
+                  setCustomDate(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="rounded-lg border border-neutral-300 bg-white px-2.5 py-1 text-xs outline-none focus:border-blue-500 font-medium"
+              />
+            )}
+
             <div className="relative">
               <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-neutral-400" />
               <input
@@ -729,7 +1095,7 @@ export function AttendancePage() {
                 placeholder="Search employee, ID, location..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-56 rounded-lg border border-neutral-300 bg-white py-1.5 pl-8 pr-3 text-xs outline-none focus:border-blue-500"
+                className="w-48 rounded-lg border border-neutral-300 bg-white py-1.5 pl-8 pr-3 text-xs outline-none focus:border-blue-500"
               />
             </div>
             <select
@@ -767,11 +1133,33 @@ export function AttendancePage() {
             <div className="mx-auto w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mb-3 border border-blue-100 shadow-2xs">
               <Clock3 className="h-7 w-7" />
             </div>
-            <h3 className="text-base font-bold text-neutral-900">Attendance Database Ready</h3>
+            <h3 className="text-base font-bold text-neutral-900">No Attendance Records for Selected Filter</h3>
             <p className="mt-1 text-xs text-neutral-500 max-w-md mx-auto leading-relaxed">
-              All previous attendance records have been cleared. As employees check in with their selfie and GPS via the Attendance Web App or portal, live records will stream here in real time.
+              Is filter ke liye koi punch-in record nahi mila. Shift check-in start hone par live records yaha stream honge. Pichhle records dekhne ke liye neeche buttons click karein.
             </p>
             <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  setDateFilterMode('month');
+                  setCurrentPage(1);
+                }}
+                className="bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200 font-semibold"
+              >
+                📅 View This Month (इस महीने का डेटा)
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  setDateFilterMode('all');
+                  setCurrentPage(1);
+                }}
+                className="font-semibold text-neutral-700"
+              >
+                📋 View All Records (सभी रिकॉर्ड्स)
+              </Button>
               <Button
                 variant="primary"
                 size="sm"
@@ -782,19 +1170,43 @@ export function AttendancePage() {
               >
                 {isSyncing ? 'Syncing...' : 'Live Sync Attendance App'}
               </Button>
-              <a
-                href="https://atendence-crm.vercel.app"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-neutral-700 bg-neutral-100 hover:bg-neutral-200 border border-neutral-200 transition"
-              >
-                <span>Open Attendance App</span>
-                <ExternalLink className="h-3.5 w-3.5 text-neutral-500" />
-              </a>
             </div>
           </div>
         ) : (
-          <div className="overflow-hidden rounded-2xl border border-neutral-200/90 bg-white shadow-sm">
+          <div className="space-y-3">
+            {isShowingRecentFallback && (
+              <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-xl bg-blue-50 border border-blue-200 text-blue-950 text-xs shadow-2xs">
+                <div className="flex items-center gap-2.5">
+                  <Clock className="w-4 h-4 text-blue-600 shrink-0" />
+                  <span>
+                    <strong>Aaj (Today)</strong> ka punch-in abhi shuru nahi hua hai (Standard shift 10:00 AM). Pichhle active attendance records neeche display ho rahe hain:
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDateFilterMode('month');
+                      setCurrentPage(1);
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-blue-600 text-white font-bold hover:bg-blue-700 transition"
+                  >
+                    View This Month
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDateFilterMode('all');
+                      setCurrentPage(1);
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-white text-blue-800 border border-blue-300 font-bold hover:bg-blue-50 transition"
+                  >
+                    View All Records
+                  </button>
+                </div>
+              </div>
+            )}
+            <div className="overflow-hidden rounded-2xl border border-neutral-200/90 bg-white shadow-sm">
             <div className="overflow-x-auto max-h-[750px] relative">
               <table className="w-full min-w-[1100px] text-left text-xs text-neutral-700">
                 <thead className="sticky top-0 z-10 border-b border-neutral-200 bg-neutral-50/95 text-[11px] font-bold uppercase tracking-wider text-neutral-500 shadow-2xs">
@@ -820,44 +1232,25 @@ export function AttendancePage() {
                       {/* Unified Employee & Photo Column */}
                       <td className="px-4 py-3.5">
                         <div className="flex items-center gap-3">
-                          <div
-                            className="relative shrink-0"
-                            onClick={(e) => {
-                              if (record.selfieUrl) {
-                                e.stopPropagation();
+                          <EmployeeAvatarBadge
+                            name={record.userName}
+                            employeeId={record.employeeId}
+                            userId={record.userId}
+                            avatarUrl={systemUsers.find((u) => u.id === record.userId)?.avatarUrl}
+                            selfieUrl={record.selfieUrl}
+                            isActive={!record.logoutTime || String(record.logoutTime).toLowerCase() === 'invalid date'}
+                            isOnLunch={Boolean(record.isOnLunch)}
+                            onSelfieClick={() => {
+                              if (record.selfieUrl && record.selfieUrl.length > 10) {
                                 setPreviewSelfie({
-                                  url: record.selfieUrl!,
+                                  url: resolveSelfieUrl(record.selfieUrl),
                                   name: record.userName,
                                   time: formatDateTime(record.loginTime, record.date),
                                   location: record.location?.address,
                                 });
                               }
                             }}
-                          >
-                            {record.selfieUrl && record.selfieUrl.length > 20 && !record.selfieUrl.includes('image/svg+xml') ? (
-                              <div
-                                className="group/selfie relative h-11 w-11 cursor-pointer overflow-hidden rounded-xl border-2 border-emerald-500 shadow-sm transition-transform hover:scale-105"
-                                title="Click to view full punch selfie"
-                              >
-                                <img
-                                  src={record.selfieUrl}
-                                  alt={record.userName}
-                                  className="h-full w-full object-cover"
-                                  loading="lazy"
-                                  onError={(e) => {
-                                    (e.target as HTMLElement).style.display = 'none';
-                                  }}
-                                />
-                                <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover/selfie:opacity-100 transition-opacity">
-                                  <Camera className="h-4 w-4 text-white" />
-                                </div>
-                              </div>
-                            ) : (
-                              <div className="h-11 w-11 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-500 font-bold text-sm">
-                                {record.userName ? record.userName.charAt(0).toUpperCase() : 'U'}
-                              </div>
-                            )}
-                          </div>
+                          />
 
                           <div className="min-w-0">
                             <div className="font-bold text-neutral-900 group-hover:text-blue-600 transition-colors flex items-center gap-1.5 truncate">
@@ -1045,6 +1438,16 @@ export function AttendancePage() {
                           <Button
                             size="xs"
                             variant="secondary"
+                            onClick={() => handleOpenEmployeeMonthlyHistory(record.userId)}
+                            className="bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-200 font-bold shadow-2xs flex items-center gap-1"
+                            title="View employee full month attendance and lunch history"
+                          >
+                            <Utensils className="w-3 h-3 text-amber-600" />
+                            <span>Month & Lunch</span>
+                          </Button>
+                          <Button
+                            size="xs"
+                            variant="secondary"
                             onClick={() => handleOpenEmployeeDetails(record)}
                             className="bg-white hover:bg-blue-50 text-blue-700 border-neutral-200 hover:border-blue-300 font-semibold shadow-2xs"
                           >
@@ -1070,8 +1473,68 @@ export function AttendancePage() {
                 </tbody>
               </table>
             </div>
+
+            {/* Pagination Controls */}
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-neutral-200 bg-neutral-50/80 px-4 py-3 text-xs text-neutral-600">
+              <div className="flex items-center gap-2">
+                <span>
+                  Showing <span className="font-bold text-neutral-900">{filteredPunchRecords.length > 0 ? (currentPage - 1) * pageSize + 1 : 0}</span> to{' '}
+                  <span className="font-bold text-neutral-900">{Math.min(currentPage * pageSize, totalRecords || filteredPunchRecords.length)}</span> of{' '}
+                  <span className="font-bold text-neutral-900">{totalRecords || filteredPunchRecords.length}</span> records
+                </span>
+                <span className="text-neutral-300">|</span>
+                <div className="flex items-center gap-1.5">
+                  <span>Rows:</span>
+                  <select
+                    value={pageSize}
+                    onChange={(e) => {
+                      setPageSize(Number(e.target.value));
+                      setCurrentPage(1);
+                    }}
+                    className="rounded border border-neutral-300 bg-white px-2 py-0.5 text-xs outline-none focus:border-blue-500 font-semibold"
+                  >
+                    <option value={25}>25</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <Button
+                  size="xs"
+                  variant="secondary"
+                  disabled={currentPage <= 1 || isLoading}
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  className="px-2.5 py-1 text-xs font-semibold disabled:opacity-40"
+                >
+                  Previous
+                </Button>
+                <span className="px-2 font-mono font-bold text-neutral-800">
+                  Page {currentPage} of {Math.max(1, totalPages)}
+                </span>
+                <Button
+                  size="xs"
+                  variant="secondary"
+                  disabled={currentPage >= totalPages || isLoading}
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  className="px-2.5 py-1 text-xs font-semibold disabled:opacity-40"
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
           </div>
-        )
+        </div>
+      )
+      ) : activeTab === 'monthly-history' ? (
+        <EmployeeMonthlyHistoryView
+          availableEmployees={availableEmployeesForHistory}
+          preselectedUserId={selectedEmployeeForMonth}
+          onPreviewSelfie={(selfie) => setPreviewSelfie(selfie)}
+        />
+      ) : activeTab === 'work-reports' ? (
+        <WorkReportsTableView />
       ) : (
         /* MONTHLY AGGREGATED VIEW */
         employees.length === 0 ? (
@@ -1150,16 +1613,30 @@ export function AttendancePage() {
                         )}
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <Button
-                          variant="ghost"
-                          size="xs"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            setSelectedEmployee(employee);
-                          }}
-                        >
-                          View details
-                        </Button>
+                        <div className="flex items-center justify-end gap-1.5">
+                          <Button
+                            variant="secondary"
+                            size="xs"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              handleOpenEmployeeMonthlyHistory(employee.userId);
+                            }}
+                            className="bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-200 font-bold"
+                          >
+                            <Utensils className="w-3 h-3 text-amber-600 mr-1" />
+                            Month & Lunch
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="xs"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setSelectedEmployee(employee);
+                            }}
+                          >
+                            View details
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -1300,6 +1777,19 @@ export function AttendancePage() {
                       Remote Logout & Punch-Out
                     </Button>
                   )}
+                  <Button
+                    size="xs"
+                    variant="secondary"
+                    onClick={() => {
+                      const empId = selectedEmployee.userId;
+                      setSelectedEmployee(null);
+                      handleOpenEmployeeMonthlyHistory(empId);
+                    }}
+                    className="bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-200 font-bold"
+                    icon={<Utensils className="w-3.5 h-3.5 text-amber-600" />}
+                  >
+                    Full Month History & Lunch (मासिक व लंच)
+                  </Button>
                   <Link
                     to={`/leads?search=${encodeURIComponent(selectedEmployee.name)}`}
                     className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 transition shadow-2xs"
@@ -1365,12 +1855,12 @@ export function AttendancePage() {
                       </div>
 
                       {/* Selfie & Location Card */}
-                      {record.selfieUrl && record.selfieUrl.length > 20 && !record.selfieUrl.includes('image/svg+xml') && (
+                      {record.selfieUrl && record.selfieUrl.length > 10 && !record.selfieUrl.includes('image/svg+xml') && (
                         <div className="border-b border-neutral-100 p-4 bg-gradient-to-r from-emerald-50/40 to-blue-50/30 flex items-center gap-3.5">
                           <div
                             onClick={() =>
                               setPreviewSelfie({
-                                url: record.selfieUrl!,
+                                url: resolveSelfieUrl(record.selfieUrl),
                                 name: record.userName,
                                 time: formatDateTime(record.loginTime, record.date),
                                 location: record.location?.address,
@@ -1380,7 +1870,7 @@ export function AttendancePage() {
                             title="Click to view full photo"
                           >
                             <img
-                              src={record.selfieUrl}
+                              src={resolveSelfieUrl(record.selfieUrl)}
                               alt="Punch Selfie"
                               className="h-full w-full object-cover transition-transform group-hover:scale-105"
                               onError={(e) => {
@@ -1417,21 +1907,70 @@ export function AttendancePage() {
                         </div>
                       )}
 
+                      {/* Lunch Breaks Section for this Day */}
+                      {((record.lunchBreaks && record.lunchBreaks.length > 0) || record.totalLunchDurationSeconds) && (
+                        <div className="border-b border-amber-200/80 p-3 bg-amber-50/70 space-y-2 text-xs">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex items-center gap-1.5 font-bold text-amber-950">
+                              <Utensils className="w-4 h-4 text-amber-600" />
+                              <span>Lunch Timing & Breaks (लंच का समय):</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono text-[10px] bg-amber-200/70 text-amber-900 px-2 py-0.5 rounded font-bold">
+                                Sched: 1:00 PM · 20m Limit
+                              </span>
+                              {record.lunchDurationFormatted && (
+                                <span className="font-mono font-black text-amber-950 bg-amber-200 px-2.5 py-0.5 rounded text-[11px] border border-amber-300">
+                                  Total: {record.lunchDurationFormatted}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          {record.lunchBreaks && record.lunchBreaks.length > 0 ? (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-0.5 font-mono text-[11px]">
+                              {record.lunchBreaks.map((lb, idx) => {
+                                const sD = parseToValidDate(lb.startTime, record.date);
+                                const eD = parseToValidDate(lb.endTime, record.date);
+                                const isOngoing = !eD || lb.status === 'ONGOING';
+                                const sec = lb.durationSeconds || (sD && eD ? Math.max(0, Math.round((eD.getTime() - sD.getTime()) / 1000)) : 0);
+                                const isOverstay = sec > 1200;
+                                return (
+                                  <div key={idx} className={`p-2 rounded-lg border ${isOverstay ? 'bg-amber-100/70 border-amber-300' : 'bg-white border-amber-200'}`}>
+                                    <div className="flex items-center justify-between font-bold text-neutral-900">
+                                      <span>Lunch Break #{idx + 1}</span>
+                                      <span className={isOverstay ? 'text-amber-900' : 'text-emerald-800'}>
+                                        {formatDuration(lb.startTime, lb.endTime, record.date)}
+                                      </span>
+                                    </div>
+                                    <div className="text-[10px] text-neutral-600 mt-1 flex items-center justify-between">
+                                      <span>Start: {formatExactTime(lb.startTime, record.date)}</span>
+                                      <span>Return: {isOngoing ? 'Ongoing Break' : formatExactTime(lb.endTime, record.date)}</span>
+                                    </div>
+                                    <div className="mt-1 text-[10px] font-sans font-semibold">
+                                      {isOngoing ? (
+                                        <span className="text-amber-800 animate-pulse">⏳ Break In Progress</span>
+                                      ) : isOverstay ? (
+                                        <span className="text-amber-900">⚠️ Exceeded 20 min rule</span>
+                                      ) : (
+                                        <span className="text-emerald-700">✅ On time (Within 20m)</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : null}
+                        </div>
+                      )}
+
                       {/* Login and Logout Event Cards */}
                       <div className="divide-y divide-neutral-100 p-3 space-y-3">
                         {events.map((event, index) => {
-                          const isSameAsLogin = (() => {
-                            if (!event.logoutTime) return false;
-                            const logD = parseToValidDate(event.loginTime, record.date);
-                            const outD = parseToValidDate(event.logoutTime, record.date);
-                            return Boolean(logD && outD && Math.abs(outD.getTime() - logD.getTime()) <= 3000);
-                          })();
+                          const parsedOut = parseToValidDate(event.logoutTime, record.date);
+                          const parsedIn = parseToValidDate(event.loginTime, record.date);
+                          const isSameAsLogin = Boolean(parsedIn && parsedOut && Math.abs(parsedOut.getTime() - parsedIn.getTime()) <= 3000);
 
-                          const hasLogout =
-                            Boolean(event.logoutTime) &&
-                            String(event.logoutTime).toLowerCase() !== 'null' &&
-                            String(event.logoutTime).toLowerCase() !== 'invalid date' &&
-                            !isSameAsLogin;
+                          const hasLogout = Boolean(parsedOut && parsedOut.getFullYear() >= 2020 && !isSameAsLogin);
 
                           const duration = hasLogout ? formatDuration(event.loginTime, event.logoutTime, record.date) : 'Currently Active';
 

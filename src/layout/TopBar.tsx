@@ -6,6 +6,7 @@ import { useNotificationStore, AppNotification } from '@/stores/notificationStor
 import { organizationsApi, TenantOrgDto } from '@/features/admin/api/organizationsApi';
 
 import { UserProfileDrawer } from '@/components/patterns/UserProfileDrawer';
+import { LunchBreakWidget } from './LunchBreakWidget';
 import {
   Search,
   Bell,
@@ -224,6 +225,9 @@ export function TopBar() {
         >
           <Search className="w-4 h-4" />
         </button>
+
+        {/* Quick Lunch Break Widget */}
+        <LunchBreakWidget />
 
         {/* Real-Time Live Notification Bell */}
         <div className="relative">

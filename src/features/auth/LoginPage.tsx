@@ -113,15 +113,31 @@ export function LoginPage() {
       navigate(dashboard, { replace: true });
     } catch (err: any) {
       console.error('❌ Login failed:', err);
+      const isNetworkIssue =
+        !navigator.onLine ||
+        err?.code === 'NETWORK_DISCONNECTED' ||
+        err?.status === 0 ||
+        err?.message?.toLowerCase().includes('failed to fetch') ||
+        err?.message?.toLowerCase().includes('network') ||
+        err?.message?.toLowerCase().includes('econnrefused') ||
+        err?.message?.toLowerCase().includes('load failed') ||
+        err?.message?.toLowerCase().includes('connection');
+
       const isInvalidCredentials = err?.code === 'INVALID_CREDENTIALS';
-      const message = isInvalidCredentials
+      const message = isNetworkIssue
+        ? (!navigator.onLine
+            ? 'Aapka internet connection band hai. Kripya apna Wi-Fi ya mobile data on karein.'
+            : 'Backend server se sampark nahi ho pa raha hai. Kripya apna internet connection ya backend server status check karein.')
+        : isInvalidCredentials
         ? 'The Employee ID/email or password is incorrect. Please check your details and try again.'
         : err?.message || 'Unable to sign in. Please try again later.';
+
       setLoginError(message);
       addToast({
         type: 'danger',
-        title: 'Authentication Failed',
+        title: isNetworkIssue ? 'Network / Connection Error (नेटवर्क समस्या)' : 'Authentication Failed',
         message,
+        durationMs: isNetworkIssue ? 7000 : 4000,
       });
     } finally {
       setIsLoading(false);

@@ -19,6 +19,7 @@ import {
   Cpu,
   Sparkles,
   X,
+  WifiOff,
 } from 'lucide-react';
 import { authApi } from './api/authApi';
 
@@ -31,6 +32,7 @@ export function AdminLoginPage() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [networkError, setNetworkError] = useState<string | null>(null);
 
   // Forgot Password Modal State
   const [forgotStep, setForgotStep] = useState<'closed' | 'email' | 'reset'>('closed');
@@ -72,6 +74,7 @@ export function AdminLoginPage() {
     }
 
     setIsLoading(true);
+    setNetworkError(null);
 
     try {
       // 1. Authenticate with backend
@@ -114,8 +117,28 @@ export function AdminLoginPage() {
     } catch (err: any) {
       console.warn('⚠️ Admin login attempt failed:', err);
 
-      // Distinguish an authorization failure from a failed database-backed login.
-      if (err?.message?.includes('Access Denied')) {
+      const isNetworkIssue =
+        !navigator.onLine ||
+        err?.code === 'NETWORK_DISCONNECTED' ||
+        err?.status === 0 ||
+        err?.message?.toLowerCase().includes('failed to fetch') ||
+        err?.message?.toLowerCase().includes('network') ||
+        err?.message?.toLowerCase().includes('econnrefused') ||
+        err?.message?.toLowerCase().includes('load failed') ||
+        err?.message?.toLowerCase().includes('connection');
+
+      if (isNetworkIssue) {
+        const netMsg = !navigator.onLine
+          ? 'Aapka internet connection band hai. Kripya apna Wi-Fi ya mobile data on karein.'
+          : 'Backend server se sampark nahi ho pa raha hai. Kripya apna internet connection ya backend server status check karein (Port 5001 / Server unreachable).';
+        setNetworkError(netMsg);
+        addToast({
+          type: 'danger',
+          title: 'Network / Connection Error (नेटवर्क समस्या)',
+          message: netMsg,
+          durationMs: 7000,
+        });
+      } else if (err?.message?.includes('Access Denied')) {
         addToast({
           type: 'danger',
           title: 'Admin Clearance Denied',
@@ -319,6 +342,28 @@ export function AdminLoginPage() {
                   ROOT
                 </span>
               </div>
+
+              {/* Network / Connection Issue Alert Banner */}
+              {networkError && (
+                <div className="p-3.5 rounded-xl bg-rose-950/80 border border-rose-500/60 text-rose-200 text-xs flex items-start gap-2.5 shadow-lg animate-in fade-in slide-in-from-top-1">
+                  <WifiOff className="w-4 h-4 text-rose-400 shrink-0 mt-0.5 animate-pulse" />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-bold text-rose-300 flex items-center gap-1.5">
+                      <span>Network / Connection Issue</span>
+                      <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-rose-900/60 text-rose-300 border border-rose-700/50">नेटवर्क एरर</span>
+                    </div>
+                    <p className="text-[11px] text-rose-200/90 mt-1 leading-relaxed">{networkError}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setNetworkError(null)}
+                    className="text-rose-400 hover:text-white p-0.5 rounded transition"
+                    title="Dismiss"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
 
               {/* Form */}
               <form onSubmit={handleAdminLogin} className="space-y-4">

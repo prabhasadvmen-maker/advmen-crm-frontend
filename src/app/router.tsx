@@ -1,6 +1,6 @@
 import { createBrowserRouter } from 'react-router-dom';
 import { PageShell } from '@/layout/PageShell';
-import { LoginPage, AdminLoginPage, SSORedirectPage, SSOLoginPage } from '@/features/auth';
+import { LoginPage, AdminLoginPage, SSORedirectPage, SSOLoginPage, LogoutHandler } from '@/features/auth';
 import { RoleRouteGuard } from '@/components/system/RoleRouteGuard';
 import {
   SuperAdminDashboard,
@@ -25,31 +25,6 @@ import { AdminDashboard, AttendancePage, EmployeeManagementPage } from '@/featur
 import { EmployeeDashboard } from '@/features/employee';
 import { LeadImportPage } from '@/features/imports/LeadImportPage';
 import { SettingsPage } from '@/features/admin/SettingsPage';
-
-import { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useSessionStore } from '@/stores/sessionStore';
-
-function LogoutHandler() {
-  const { logout } = useSessionStore();
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    void (async () => {
-      await logout();
-      navigate('/login?logout=true', { replace: true });
-    })();
-  }, [logout, navigate]);
-
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-neutral-50 text-neutral-600 text-sm">
-      <div className="flex items-center gap-2">
-        <span className="h-4 w-4 rounded-full border-2 border-blue-600 border-t-transparent animate-spin" />
-        <span>Signing out...</span>
-      </div>
-    </div>
-  );
-}
 
 export const router = createBrowserRouter([
   { path: '/', element: <LoginPage /> },
